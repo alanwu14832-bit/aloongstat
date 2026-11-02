@@ -1,0 +1,64 @@
+import { ARCHIVE, LIVE_BASE } from '../../config/archive'
+import { useState } from 'react'
+import { LoginForm } from './LoginForm'
+import { EditorClaim } from './EditorClaim'
+import { CloudOff, LogOut, RefreshCw } from 'lucide-react'
+import { Card } from './Card'
+import { Button } from './Button'
+import { Badge } from './Badge'
+import { signOut } from '../../data/supabase'
+import { useDataStore } from '../../store/data'
+
+/** Cloud (Supabase) status + sign-in. Rendered on the import page. */
+export function CloudPanel() {
+  const cloud = useDataStore((s) => s.cloud)
+  const loadCloud = useDataStore((s) => s.loadCloud)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  if (ARCHIVE) {
+    return (
+      <Card title="舊版網站" subtitle={ARCHIVE.date}>
+        <p className="text-[13px] text-ink-2 leading-relaxed">這是以前的網站版本，只能瀏覽，不能登入、紀錄或上傳。要紀錄請<a className="underline underline-offset-2 text-ink" href={LIVE_BASE}>回到最新版網站</a>。</p>
+      </Card>
+    )
+  }
+  if (!cloud.configured) {
+    return (
+      <Card title="雲端資料庫" subtitle="未啟用">
+        <div className="flex items-start gap-2.5 text-[13px] text-ink-2 leading-relaxed"><CloudOff className="size-4 mt-0.5 shrink-0 text-muted" /><span>目前為本地模式：資料只存在這個瀏覽器。要讓全隊共用同一份資料，請依 docs/SETUP.md 在網站主機填入資料庫的環境變數後重新部署。</span></div>
+      </Card>
+    )
+  }
+
+  const run = async (fn: () => Promise<void>, ok: string) => {
+    setMsg(null)
+    try { await fn(); setMsg(ok) } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) }
+  }
+  const status = cloud.status === 'ready' ? '已連線' : cloud.status === 'loading' ? '載入中' : cloud.status === 'error' ? '連線失敗' : '關閉'
+
+  return (
+    <Card title="雲端資料庫" subtitle={cloud.lastSync ? `最後同步 ${new Date(cloud.lastSync).toLocaleString('zh-TW')}` : '尚未同步'}
+      action={<Badge variant={cloud.status === 'ready' ? 'good' : cloud.status === 'error' ? 'critical' : 'neutral'}>{status}</Badge>}>
+      <div className="flex flex-col gap-3 text-[13px]">
+        {cloud.error && <div className="text-critical">{cloud.error}</div>}
+        {cloud.user ? (
+          <>
+            {cloud.user.is_anonymous ? (
+              <div className="rounded-[var(--radius-sm)] bg-surface-2 px-3 py-2.5 text-ink-2 leading-relaxed">已用<span className="font-medium text-ink">快速登入</span>。{cloud.isEditor ? '可以紀錄、修改比賽，所有人即時看到；紀錄員名單要用自己的帳號登入才能管理。' : '快速登入已經失效（到期，或密碼已更換）。請登出後重新輸入快速登入密碼。'}</div>
+            ) : (
+              <div className="rounded-[var(--radius-sm)] bg-surface-2 px-3 py-2.5 text-ink-2 leading-relaxed">已以 <span className="font-medium text-ink">{cloud.user.email}</span> 登入。{cloud.isEditor ? '上傳的檔案會寫入雲端，所有人即時看到。' : cloud.access && cloud.access !== 'not_listed' ? '這個帳號還不能寫入，見下方。' : '這個帳號不在紀錄員名單，只能瀏覽；請現有的紀錄員在「紀錄員名單」新增你的 email。'}</div>
+            )}
+            <EditorClaim />
+            <div className="flex gap-2 flex-wrap">
+              <Button size="sm" icon={<RefreshCw />} onClick={() => void loadCloud()} disabled={cloud.status === 'loading'}>重新載入</Button>
+              <Button size="sm" variant="ghost" icon={<LogOut />} onClick={() => void run(signOut, '已登出')}>登出</Button>
+            </div>
+          </>
+        ) : (
+          <LoginForm onDone={() => setMsg('登入成功')} />
+        )}
+        {msg && <div role="status" className="text-xs text-ink-2">{msg}</div>}
+      </div>
+    </Card>
+  )
+}

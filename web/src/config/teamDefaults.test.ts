@@ -1,0 +1,52 @@
+import { describe, expect, it } from 'vitest'
+import { assetUrl, resolveTeam, TEAM_DEFAULTS } from './teamDefaults'
+
+describe('team config', () => {
+  it('keeps the team defaults when nothing is set', () => {
+    expect(resolveTeam({})).toEqual(TEAM_DEFAULTS)
+  })
+  it('takes VITE_TEAM_* over the defaults, ignoring blanks and bad numbers', () => {
+    const t = resolveTeam({ VITE_TEAM_NAME: ' 台大棒球 ', VITE_TEAM_ORG: '', VITE_TEAM_INNINGS: '7', VITE_TEAM_SEED: '0' })
+    expect(t.name).toBe('台大棒球')
+    expect(t.org).toBe(TEAM_DEFAULTS.org)
+    expect(t.innings).toBe(7)
+    expect(t.seed).toBe(false)
+    expect(resolveTeam({ VITE_TEAM_INNINGS: 'nine' }).innings).toBe(TEAM_DEFAULTS.innings)
+    expect(resolveTeam({ VITE_TEAM_SEED: 'yes' }).seed).toBe(true)
+  })
+  it('reads the tie-break bases (VITE_TEAM_TIEBREAK), keeping the default for anything else', () => {
+    expect(resolveTeam({}).tiebreak).toBe('12')
+    expect(resolveTeam({ VITE_TEAM_TIEBREAK: '2' }).tiebreak).toBe('2')
+    expect(resolveTeam({ VITE_TEAM_TIEBREAK: '123' }).tiebreak).toBe('123')
+    expect(resolveTeam({ VITE_TEAM_TIEBREAK: 'off' }).tiebreak).toBe('')
+    expect(resolveTeam({ VITE_TEAM_TIEBREAK: '0' }).tiebreak).toBe('')
+    expect(resolveTeam({ VITE_TEAM_TIEBREAK: '9' }).tiebreak).toBe('12')
+  })
+  it('carries the pitch-rest rules (投手休息表) as they are', () => {
+    expect(resolveTeam({}).pitchRest).toEqual(TEAM_DEFAULTS.pitchRest)
+    expect(resolveTeam({}).pitchRest.dailyMax).toBe(120)
+  })
+  it('reads the season start month (VITE_TEAM_SEASON_START), calendar year by default', () => {
+    expect(resolveTeam({}).seasonStart).toBe(1)
+    expect(resolveTeam({ VITE_TEAM_SEASON_START: '8' }).seasonStart).toBe(8)
+    expect(resolveTeam({ VITE_TEAM_SEASON_START: '1' }).seasonStart).toBe(1)
+    expect(resolveTeam({ VITE_TEAM_SEASON_START: '13' }).seasonStart).toBe(1)
+    expect(resolveTeam({ VITE_TEAM_SEASON_START: 'x' }).seasonStart).toBe(1)
+    expect(resolveTeam({ VITE_TEAM_SEASON_START: '8.5' }).seasonStart).toBe(1)
+  })
+  it('reads the link-preview settings (site address, picture, description)', () => {
+    expect(resolveTeam({}).siteUrl).toBe('')
+    expect(resolveTeam({ VITE_TEAM_SITE_URL: 'https://x.org/' }).siteUrl).toBe('https://x.org')
+    expect(resolveTeam({ VITE_TEAM_SITE_URL: 'javascript:alert(1)' }).siteUrl).toBe(TEAM_DEFAULTS.siteUrl)
+    expect(resolveTeam({ VITE_TEAM_SITE_URL: 'x.org' }).siteUrl).toBe(TEAM_DEFAULTS.siteUrl)
+    expect(resolveTeam({}).ogImage).toBe('og.png')
+    expect(resolveTeam({ VITE_TEAM_OG_IMAGE: 'banner.jpg' }).ogImage).toBe('banner.jpg')
+    expect(resolveTeam({}).description).toBe('')
+    expect(resolveTeam({ VITE_TEAM_DESCRIPTION: '我們的球隊' }).description).toBe('我們的球隊')
+  })
+  it('resolves assets against the base path, leaving URLs alone', () => {
+    expect(assetUrl('mark.png', '/bafinstat/')).toBe('/bafinstat/mark.png')
+    expect(assetUrl('/team/mark.png', '/')).toBe('/team/mark.png')
+    expect(assetUrl('https://x.org/a.png', '/b/')).toBe('https://x.org/a.png')
+  })
+})

@@ -1,0 +1,561 @@
+/**
+ * Supabase cloud layer. When VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are
+ * set, the cloud database becomes the single source of truth: everyone reads
+ * it (no login), signed-in scorers write to it. Without the env vars the app
+ * runs exactly as before (local-only).
+ */
+import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js'
+import type { Editor } from './editors'
+import type { BattingPA, Dataset, FieldingLine, Game, GameDayRoster, HomeAway, OppBats, OppHand, PitchingPA, Player, PlayEvent, PriorPitch } from './types'
+import { isPracticeId } from './types'
+import { normalizeDataset } from './normalize'
+import { parseDayRoster } from './gameRoster'
+
+const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
+const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+
+export const cloudConfigured = !!(url && anon)
+
+let client: SupabaseClient | null = null
+export function supabase(): SupabaseClient {
+  if (!cloudConfigured) throw new Error('Supabase 未設定（缺少 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY）')
+  if (!client) client = createClient(url!, anon!, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' } })
+  return client
+}
+
+// ---------------------------------------------------------------- row ↔ model mapping
+interface PlayerRow { name: string; number: string | null; primary_pos: string | null; secondary_pos: string | null; bats: string | null; throws: string | null; status: string | null; note: string | null }
+interface GameRow { id: string; date: string; time: string | null; end_time?: string | null; tournament: string; opponent: string; home_away: string; venue: string | null; weather: string | null; recorder: string | null; innings: number | null; winning_pitcher: string | null; losing_pitcher: string | null; save_pitcher: string | null; holds: string[] | null; note: string | null; status?: string | null; day_roster?: GameDayRoster | null }
+interface BattingRow { game_id: string; seq: number; inning: number; outs_before: number | null; bases_before: string | null; batting_order: number | null; pos: string | null; batter: string; runner?: string | null; pitches: string[]; result: string; loc: number | null; traj: string | null; quality: string | null; sb: number; cs: number; adv_on_error: number; out_on_base: number; baserunning_outs?: number; run: number; rbi: number; code: string | null; note: string | null; events?: PlayEvent[] | null; opp_pitcher?: string | null; opp_hand?: string | null; errors?: string[] | null }
+interface PitchingRow { game_id: string; seq: number; inning: number; outs_before: number | null; bases_before: string | null; opp_order: number | null; pitcher: string; opp_batter: string | null; pitches: string[]; result: string; loc: number | null; traj: string | null; quality: string | null; sba: number; cs: number; wp: number; pb: number; pk: number; errors?: string[] | null; code: string | null; note: string | null; events?: PlayEvent[] | null; runner?: string | null; rbi?: number | null; opp_bats?: string | null; prior_pitchers?: PriorPitch[] | null }
+interface FieldingRow { game_id: string; seq: number; player: string; pos: string; innings: number | null; po: number; a: number; e: number; dp: number; pb: number; sb: number; cs: number; note: string | null }
+
+const u = <T,>(v: T | null | undefined): T | undefined => (v === null || v === undefined ? undefined : v)
+const n = (v: string | undefined): string | null => (v === undefined || v === '' ? null : v)
+
+export function toPlayerRow(p: Player): PlayerRow {
+  return { name: p.name, number: n(p.number), primary_pos: n(p.primaryPos), secondary_pos: n(p.secondaryPos), bats: n(p.bats), throws: n(p.throws), status: n(p.status), note: n(p.note) }
+}
+export function toGameRow(g: Game): GameRow {
+  // day_roster is left out (not null) when a game has none: postgrest fills a key missing from some rows of an array
+  // upsert with NULL, and an old-workbook import must not wipe rosters saved in the cloud
+  // end_time is always sent (null clears it: the file / the editor is the truth); save_games() ignores it before the
+  // 2026-10-14 migration, the piecewise path strips it (OPTIONAL_GAME_COLUMNS)
+  return { id: g.id, date: g.date, time: n(g.time), end_time: n(g.endTime), tournament: g.tournament || '未分類', opponent: g.opponent || '未知', home_away: g.homeAway, venue: n(g.venue), weather: n(g.weather), recorder: n(g.recorder), innings: g.innings ?? null, winning_pitcher: n(g.winningPitcher), losing_pitcher: n(g.losingPitcher), save_pitcher: n(g.savePitcher), holds: g.holds?.length ? g.holds : null, note: n(g.note), status: n(g.status), ...(g.dayRoster ? { day_roster: g.dayRoster } : {}) }
+}
+export function toBattingRow(p: BattingPA, seq: number): BattingRow {
+  return { game_id: p.gameId, seq, inning: p.inning, outs_before: p.outsBefore ?? null, bases_before: n(p.basesBefore), batting_order: p.order ?? null, pos: n(p.pos), batter: p.batter, pitches: p.pitches, result: p.result, loc: p.loc ?? null, traj: n(p.traj), quality: n(p.quality), sb: p.sb, cs: p.cs, adv_on_error: p.advOnError, out_on_base: p.outOnBase, run: p.run, rbi: p.rbi, code: n(p.code), note: n(p.note),
+    // only when there is one: a project without the column (migration not run) still takes every other row
+    ...(p.runner ? { runner: p.runner } : {}), ...(p.events?.length ? { events: p.events } : {}), ...(p.baserunningOuts ? { baserunning_outs: p.baserunningOuts } : {}),
+    ...(p.oppPitcher ? { opp_pitcher: p.oppPitcher } : {}), ...(p.oppHand ? { opp_hand: p.oppHand } : {}), ...(p.errors?.length ? { errors: p.errors } : {}) }
+}
+/** pitching_pa.prior_pitchers as the app reads it: only well-formed entries (a name and a positive count). */
+function priorOf(v: unknown): PriorPitch[] {
+  return Array.isArray(v) ? v.flatMap((x) => (x && typeof x.name === 'string' && x.name && Number.isFinite(x.pitches) && x.pitches > 0 ? [{ name: x.name as string, pitches: Math.floor(x.pitches as number) }] : [])) : []
+}
+export function toPitchingRow(p: PitchingPA, seq: number): PitchingRow {
+  return { game_id: p.gameId, seq, inning: p.inning, outs_before: p.outsBefore ?? null, bases_before: n(p.basesBefore), opp_order: p.oppOrder ?? null, pitcher: p.pitcher, opp_batter: n(p.oppBatter), pitches: p.pitches, result: p.result, loc: p.loc ?? null, traj: n(p.traj), quality: n(p.quality), sba: p.sba, cs: p.cs, wp: p.wp, pb: p.pb, pk: p.pk, code: n(p.code), note: n(p.note),
+    ...(p.errors?.length ? { errors: p.errors } : {}), ...(p.events?.length ? { events: p.events } : {}), ...(p.runner ? { runner: p.runner } : {}), ...(p.rbi ? { rbi: p.rbi } : {}),
+    // 對方打者左右打 (2026-10-16): only when known, so a project without the column still takes the row
+    ...(p.oppBats ? { opp_bats: p.oppBats } : {}),
+    // 換投時這個打席已投的球算給誰 (2026-10-18): only when there is one
+    ...(p.priorPitchers?.length ? { prior_pitchers: p.priorPitchers } : {}) }
+}
+export function toFieldingRow(f: FieldingLine, seq: number): FieldingRow {
+  return { game_id: f.gameId, seq, player: f.player, pos: f.pos, innings: f.innings ?? null, po: f.po, a: f.a, e: f.e, dp: f.dp, pb: f.pb, sb: f.sb, cs: f.cs, note: n(f.note) }
+}
+
+export function rowsToDataset(rows: { players: PlayerRow[]; games: GameRow[]; batting: BattingRow[]; pitching: PitchingRow[]; fielding: FieldingRow[] }): Dataset {
+  return {
+    roster: rows.players.map((r) => ({ name: r.name, number: u(r.number), primaryPos: u(r.primary_pos), secondaryPos: u(r.secondary_pos), bats: u(r.bats) as Player['bats'], throws: u(r.throws) as Player['throws'], status: u(r.status), note: u(r.note) })),
+    games: rows.games.map((r) => ({ id: r.id, date: r.date, time: u(r.time), ...(r.end_time ? { endTime: r.end_time } : {}), tournament: r.tournament, opponent: r.opponent, homeAway: (r.home_away === '客' ? '客' : '主') as HomeAway, venue: u(r.venue), weather: u(r.weather), recorder: u(r.recorder), innings: u(r.innings), winningPitcher: u(r.winning_pitcher), losingPitcher: u(r.losing_pitcher), savePitcher: u(r.save_pitcher), holds: u(r.holds), note: u(r.note), status: (r.status === 'scheduled' || r.status === 'cancelled' ? r.status : undefined), dayRoster: parseDayRoster(r.day_roster) })),
+    batting: rows.batting.map((r) => ({ gameId: r.game_id, inning: r.inning, outsBefore: u(r.outs_before), basesBefore: u(r.bases_before), order: u(r.batting_order), pos: u(r.pos), batter: r.batter, ...(r.runner ? { runner: r.runner } : {}), pitches: r.pitches ?? [], result: r.result, loc: u(r.loc), traj: u(r.traj), quality: u(r.quality), sb: r.sb, cs: r.cs, advOnError: r.adv_on_error, outOnBase: r.out_on_base, run: r.run, rbi: r.rbi, code: u(r.code), note: u(r.note), ...(r.events?.length ? { events: r.events } : {}), ...(r.baserunning_outs ? { baserunningOuts: r.baserunning_outs } : {}),
+      ...(r.opp_pitcher ? { oppPitcher: r.opp_pitcher } : {}), ...(r.opp_hand === 'L' || r.opp_hand === 'R' ? { oppHand: r.opp_hand as OppHand } : {}), ...(r.errors?.length ? { errors: r.errors } : {}) })),
+    pitching: rows.pitching.map((r) => ({ gameId: r.game_id, inning: r.inning, outsBefore: u(r.outs_before), basesBefore: u(r.bases_before), oppOrder: u(r.opp_order), pitcher: r.pitcher, oppBatter: u(r.opp_batter), pitches: r.pitches ?? [], result: r.result, loc: u(r.loc), traj: u(r.traj), quality: u(r.quality), sba: r.sba, cs: r.cs, wp: r.wp, pb: r.pb, pk: r.pk, ...(r.errors?.length ? { errors: r.errors } : {}), code: u(r.code), note: u(r.note), ...(r.events?.length ? { events: r.events } : {}), ...(r.runner ? { runner: r.runner } : {}), ...(r.rbi ? { rbi: r.rbi } : {}),
+      ...(r.opp_bats === 'L' || r.opp_bats === 'R' ? { oppBats: r.opp_bats as OppBats } : {}),
+      ...(priorOf(r.prior_pitchers).length ? { priorPitchers: priorOf(r.prior_pitchers) } : {}) })),
+    fielding: rows.fielding.map((r) => ({ gameId: r.game_id, player: r.player, pos: r.pos, innings: u(r.innings === null ? null : Number(r.innings)), po: r.po, a: r.a, e: r.e, dp: r.dp, pb: r.pb, sb: r.sb, cs: r.cs, note: u(r.note) })),
+  }
+}
+
+// ---------------------------------------------------------------- queries
+async function selectAll<T>(table: string, order: string[], columns = '*'): Promise<T[]> {
+  const out: T[] = []
+  const page = 1000
+  for (let from = 0; ; from += page) {
+    let q = supabase().from(table).select(columns).range(from, from + page - 1)
+    for (const col of order) q = q.order(col, { ascending: true })
+    const { data, error } = await q
+    if (error) throw new Error(`${table}: ${error.message}`)
+    out.push(...((data ?? []) as T[]))
+    if (!data || data.length < page) break
+  }
+  return out
+}
+
+/**
+ * Columns of the 2026-10-14 migration (supabase/migrations/2026-10-14_record_fields.sql) the cloud does not have yet,
+ * read off rows already loaded with select('*'): 'end_time' when there are games and none has that key, 'opp_hand'
+ * likewise for batting rows; 'pitching_runner' (PITCHING_RUNNER) for pitching rows without `runner` (2026-10-15). Empty tables count as having them (a new project is built from schema.sql). This is the
+ * only way to tell: save_games() silently ignores keys a table lacks.
+ */
+export function missingRecordColumns(rows: { games: object[]; batting: object[]; pitching?: object[] }): string[] {
+  const out: string[] = []
+  if (rows.games.length && !rows.games.some((r) => END_TIME_COLUMN in r)) out.push(END_TIME_COLUMN)
+  if (rows.batting.length && !rows.batting.some((r) => OPP_HAND_COLUMN in r)) out.push(OPP_HAND_COLUMN)
+  // pitching_pa.runner (對方代跑, the 2026-10-15 migration)
+  if (rows.pitching?.length && !rows.pitching.some((r) => RUNNER_COLUMN in r)) out.push(PITCHING_RUNNER)
+  // batting_pa.errors (對方失誤) and pitching_pa.rbi (對方打點), the same migration
+  if (rows.batting.length && !rows.batting.some((r) => ERRORS_COLUMN in r)) out.push(BATTING_ERRORS)
+  if (rows.pitching?.length && !rows.pitching.some((r) => 'rbi' in r)) out.push(PITCHING_RBI)
+  // pitching_pa.opp_bats (對方打者左右打, the 2026-10-16 migration)
+  if (rows.pitching?.length && !rows.pitching.some((r) => OPP_BATS_COLUMN in r)) out.push(OPP_BATS_COLUMN)
+  // pitching_pa.prior_pitchers (換投時這個打席已投的球算給誰, the 2026-10-18 migration)
+  if (rows.pitching?.length && !rows.pitching.some((r) => PRIOR_PITCHERS_COLUMN in r)) out.push(PRIOR_PITCHERS_COLUMN)
+  return out
+}
+
+/** Load the whole database (a season is a few thousand rows; fine for a team). `missing`: see missingRecordColumns. */
+export async function fetchCloudDataset(): Promise<{ dataset: Dataset; missing: string[] }> {
+  const [players, games, batting, pitching, fielding] = await Promise.all([
+    selectAll<PlayerRow>('players', ['name']), selectAll<GameRow>('games', ['date', 'id']), selectAll<BattingRow>('batting_pa', ['game_id', 'seq']),
+    selectAll<PitchingRow>('pitching_pa', ['game_id', 'seq']), selectAll<FieldingRow>('fielding_lines', ['game_id', 'seq']),
+  ])
+  return { dataset: normalizeDataset(rowsToDataset({ players, games, batting, pitching, fielding })).dataset, missing: missingRecordColumns({ games, batting, pitching }) }
+}
+
+async function chunked<T>(rows: T[], fn: (chunk: T[]) => Promise<void>, size = 500) {
+  for (let i = 0; i < rows.length; i += size) await fn(rows.slice(i, i + size))
+}
+
+/** games.end_time (結束時間), batting_pa.opp_pitcher / opp_hand (對方投手), added with the 2026-10-14 migration. */
+export const END_TIME_COLUMN = 'end_time'
+export const OPP_PITCHER_COLUMN = 'opp_pitcher'
+export const OPP_HAND_COLUMN = 'opp_hand'
+/** games columns added by later migrations; a project that has not run them still accepts saves without them. */
+const OPTIONAL_GAME_COLUMNS = ['day_roster', 'status', 'updated_by', END_TIME_COLUMN] as const
+/** batting_pa.runner (代跑), added with the rosters migration. */
+export const RUNNER_COLUMN = 'runner'
+/** pitching_pa.runner (對方代跑), added with the 2026-10-15 migration. Reported under this name (not 'runner', which is
+ *  batting_pa's 代跑) in `dropped` and missingRecordColumns. */
+export const PITCHING_RUNNER = 'pitching_runner'
+/** batting_pa.errors (對方失誤) and pitching_pa.rbi (對方打點), the 2026-10-15 migration too; reported under these names
+ *  (pitching_pa.errors is ERRORS_COLUMN, batting_pa.rbi always existed). */
+export const BATTING_ERRORS = 'batting_errors'
+export const PITCHING_RBI = 'pitching_rbi'
+/** pitching_pa.opp_bats (對方打者左右打), added with the 2026-10-16 migration. */
+export const OPP_BATS_COLUMN = 'opp_bats'
+/** pitching_pa.prior_pitchers (換投時這個打席已投的球算給誰), added with the 2026-10-18 migration. */
+export const PRIOR_PITCHERS_COLUMN = 'prior_pitchers'
+/** batting_pa.baserunning_outs (壘死), added with the 2026-10-09 migration. */
+export const BASERUNNING_OUTS_COLUMN = 'baserunning_outs'
+/** pitching_pa.errors (守備失誤), added with the rosters migration. */
+export const ERRORS_COLUMN = 'errors'
+/** batting_pa.events / pitching_pa.events (runner moves between pitches), added with the play-events migration. */
+export const EVENTS_COLUMN = 'events'
+type PgError = { message: string; code?: string }
+/** Optional games columns a PostgREST error says are missing: PGRST204 "Could not find the 'day_roster' column of
+ *  'games' in the schema cache", or 42703 "column games.day_roster does not exist". */
+export function missingGameColumns(e: PgError | null): string[] {
+  if (!e || !(e.code === 'PGRST204' || e.code === '42703' || /could not find|does not exist/i.test(e.message))) return []
+  return OPTIONAL_GAME_COLUMNS.filter((c) => new RegExp(`\\b${c}\\b`).test(e.message))
+}
+const isMissingGameColumn = (e: PgError | null) => missingGameColumns(e).length > 0
+
+/**
+ * Upsert games rows, dropping optional columns an older schema lacks (one retry per optional column, one column per error).
+ * Rows with and without day_roster go in separate requests, so games without a roster never get a NULL written over one.
+ */
+async function upsertGames(rows: Array<Record<string, unknown>>): Promise<{ error: PgError | null; dropped: string[] }> {
+  const dropped: string[] = []
+  const strip = (r: Record<string, unknown>) => { const o = { ...r }; for (const c of dropped) delete o[c]; return o }
+  for (const group of [rows.filter((r) => 'day_roster' in r), rows.filter((r) => !('day_roster' in r))]) {
+    if (!group.length) continue
+    let { error } = await supabase().from('games').upsert(group.map(strip), { onConflict: 'id' })
+    for (let i = 0; error && i < OPTIONAL_GAME_COLUMNS.length; i++) {
+      const miss = missingGameColumns(error).filter((c) => !dropped.includes(c))
+      if (!miss.length) break
+      dropped.push(...miss)
+      ;({ error } = await supabase().from('games').upsert(group.map(strip), { onConflict: 'id' }))
+    }
+    if (error) return { error, dropped }
+  }
+  return { error: null, dropped }
+}
+
+/** Games per save_games() call: each call is one transaction (an import of a whole season goes in a few calls). */
+const SAVE_BATCH = 25
+/** Child rows of these games, numbered 1, 2, … per game in the order given. */
+const seqBy = <T extends { gameId: string }>(rows: T[], ids: Set<string>) => { const c = new Map<string, number>(); return rows.filter((r) => ids.has(r.gameId)).map((r) => { const s = (c.get(r.gameId) ?? 0) + 1; c.set(r.gameId, s); return [r, s] as const }) }
+/** 'save_games' in `dropped`: the database has no save_games() yet (2026-10-13_save_games.sql not run), saved the old way. */
+export const SAVE_GAMES_FN = 'save_games'
+export const SAVE_GAMES_UNSUPPORTED = '已儲存。雲端還沒開啟存檔保護（存到一半斷線時，舊紀錄可能暫時不見）：請管理員在 Supabase 執行 supabase/migrations/2026-10-13_save_games.sql'
+// one save at a time from this device, so two autosaves never interleave their writes
+let saveQueue: Promise<unknown> = Promise.resolve()
+
+/**
+ * Write a dataset to the cloud. mode 'replace' wipes games not present in the
+ * upload; 'append' only writes games whose id is new (existing games untouched);
+ * 'upsert' overwrites exactly the games in the upload and leaves the rest alone (in-app edits).
+ * Each batch of games (the game rows and all their records) is written by save_games() in one transaction, so a
+ * failure leaves those games exactly as they were (supabase/migrations/2026-10-13_save_games.sql).
+ * Returns the number of games written, and `dropped`: games columns the project lacks (migration not run),
+ * e.g. 'day_roster' means the 當日登錄名單 was not saved.
+ */
+export function pushCloudDataset(ds: Dataset, mode: 'replace' | 'append' | 'upsert'): Promise<{ games: number; skipped: number; dropped: string[] }> {
+  const run = saveQueue.then(() => pushNow(ds, mode))
+  saveQueue = run.catch(() => undefined)
+  return run
+}
+
+async function pushNow(ds: Dataset, mode: 'replace' | 'append' | 'upsert'): Promise<{ games: number; skipped: number; dropped: string[] }> {
+  const sb = supabase()
+  const fail = (ctx: string, e: { message: string } | null) => { if (e) throw new Error(`${ctx}: ${e.message}`) }
+  if (ds.roster.length) {
+    const { error } = await sb.from('players').upsert(ds.roster.map(toPlayerRow), { onConflict: 'name' })
+    fail('球員名單', error)
+  }
+  let written = 0
+  for (let i = 0; i < ds.games.length; i += SAVE_BATCH) {
+    const games = ds.games.slice(i, i + SAVE_BATCH)
+    const ids = new Set(games.map((g) => g.id))
+    const { data, error } = await sb.rpc(SAVE_GAMES_FN, {
+      p_games: games.map(toGameRow),
+      p_batting: seqBy(ds.batting, ids).map(([r, s]) => toBattingRow(r, s)),
+      p_pitching: seqBy(ds.pitching, ids).map(([r, s]) => toPitchingRow(r, s)),
+      p_fielding: seqBy(ds.fielding, ids).map(([r, s]) => toFieldingRow(r, s)),
+      p_only_new: mode === 'append',
+    })
+    if (error && i === 0 && (error.code === 'PGRST202' || error.code === '42883')) return pushPiecewise(ds, mode)
+    fail('儲存比賽', error)
+    written += Number(data) || 0
+  }
+  // replace: only after everything is in, remove the games the upload does not have (their records cascade)
+  if (mode === 'replace') await removeGamesExcept(new Set(ds.games.map((g) => g.id)))
+  return { games: written, skipped: ds.games.length - written, dropped: [] }
+}
+
+async function removeGamesExcept(keep: Set<string>) {
+  const gone = (await selectAll<{ id: string }>('games', ['id'], 'id')).map((r) => r.id).filter((id) => !keep.has(id))
+  await chunked(gone, async (chunk) => { const { error } = await supabase().from('games').delete().in('id', chunk); if (error) throw new Error(`刪除舊比賽: ${error.message}`) }, 200)
+}
+
+/**
+ * The way games were saved before save_games(): the game rows, then each table's records cleared and written again
+ * (separate requests, so a failure in between can leave a game without records until the next save).
+ */
+async function pushPiecewise(ds: Dataset, mode: 'replace' | 'append' | 'upsert'): Promise<{ games: number; skipped: number; dropped: string[] }> {
+  const sb = supabase()
+  const fail = (ctx: string, e: { message: string } | null) => { if (e) throw new Error(`${ctx}: ${e.message}`) }
+  let games = ds.games
+  let skipped = 0
+  if (mode === 'append') {
+    const existing = new Set((await selectAll<{ id: string }>('games', ['id'], 'id')).map((r) => r.id))
+    games = ds.games.filter((g) => !existing.has(g.id))
+    skipped = ds.games.length - games.length
+  }
+  const ids = new Set(games.map((g) => g.id))
+  const dropped: string[] = [SAVE_GAMES_FN]
+  if (games.length) {
+    // who changed it is stamped by the database (a name, never an email: these rows are public);
+    // older schema without the status / day_roster columns: those are stripped and the upsert retried
+    const res = await upsertGames(games.map((g) => ({ ...toGameRow(g) })))
+    dropped.push(...res.dropped)
+    fail('比賽清單', res.error)
+    // child rows: clear then insert, per game batch
+    const idList = [...ids]
+    for (const table of ['batting_pa', 'pitching_pa', 'fielding_lines']) {
+      await chunked(idList, async (chunk) => { const { error: e } = await sb.from(table).delete().in('game_id', chunk); fail(table, e) }, 200)
+    }
+    // a column added by a later migration (代跑, 守備失誤) that the project lacks: save the rows without it and say so
+    // (`as` names a dropped column in `dropped` when it is not the column's own name: pitching_pa.runner)
+    const insertRows = async <R extends object>(table: string, ctx: string, rows: R[], cols: string[], as: Record<string, string> = {}) => {
+      let { error: e } = await sb.from(table).insert(rows)
+      // drop each missing optional column the error names, one at a time, until the rows go in
+      for (let tries = 0; e && tries < cols.length; tries++) {
+        const col = cols.find((c) => rows.some((r) => c in r) && /could not find|does not exist/i.test(e!.message) && new RegExp(`\\b${c}\\b`).test(e!.message))
+        if (!col) break
+        const tag = as[col] ?? col
+        if (!dropped.includes(tag)) dropped.push(tag)
+        rows = rows.map((r) => { const o = { ...r } as Record<string, unknown>; delete o[col]; return o as R })
+        ;({ error: e } = await sb.from(table).insert(rows))
+      }
+      fail(ctx, e)
+    }
+    await chunked(seqBy(ds.batting, ids).map(([r, s]) => toBattingRow(r, s)), (rows) => insertRows('batting_pa', '打席紀錄', rows, [RUNNER_COLUMN, EVENTS_COLUMN, BASERUNNING_OUTS_COLUMN, OPP_PITCHER_COLUMN, OPP_HAND_COLUMN, ERRORS_COLUMN], { [ERRORS_COLUMN]: BATTING_ERRORS }))
+    await chunked(seqBy(ds.pitching, ids).map(([r, s]) => toPitchingRow(r, s)), (rows) => insertRows('pitching_pa', '投球紀錄', rows, [ERRORS_COLUMN, EVENTS_COLUMN, RUNNER_COLUMN, 'rbi', OPP_BATS_COLUMN, PRIOR_PITCHERS_COLUMN], { [RUNNER_COLUMN]: PITCHING_RUNNER, rbi: PITCHING_RBI }))
+    await chunked(seqBy(ds.fielding, ids).map(([r, s]) => toFieldingRow(r, s)), async (rows) => { const { error: e } = await sb.from('fielding_lines').insert(rows); fail('守備紀錄', e) })
+  }
+  if (mode === 'replace') await removeGamesExcept(new Set(ds.games.map((g) => g.id)))
+  return { games: games.length, skipped, dropped }
+}
+
+/**
+ * Rewrite only the day_roster of these games (renames inside the jsonb, clearing a roster; pushRoster cannot reach
+ * into jsonb). Returns false when the column does not exist yet (migration not run); other errors throw.
+ */
+export async function updateGameDayRosters(entries: Array<{ id: string; day_roster: GameDayRoster | null }>): Promise<boolean> {
+  for (const { id, day_roster } of entries) {
+    const { error } = await supabase().from('games').update({ day_roster }).eq('id', id)
+    if (isMissingGameColumn(error)) return false
+    if (error) throw new Error(`比賽清單: ${error.message}`)
+  }
+  return true
+}
+
+/** Rewrite the 中繼成功 list (holds) of these games, after a player was renamed (pushRoster cannot reach into arrays). */
+export async function updateGameHolds(entries: Array<{ id: string; holds: string[] | null }>) {
+  for (const { id, holds } of entries) {
+    const { error } = await supabase().from('games').update({ holds }).eq('id', id)
+    if (error) throw new Error(`比賽清單: ${error.message}`)
+  }
+}
+
+// ---------------------------------------------------------------- roster
+/** Upsert players, rename records for renamed players, delete removed players. */
+export async function pushRoster(players: Player[], renames: Record<string, string>, removed: string[]) {
+  const sb = supabase()
+  const fail = (ctx: string, e: { message: string } | null) => { if (e) throw new Error(`${ctx}: ${e.message}`) }
+  for (const [from, to] of Object.entries(renames)) {
+    fail('打席紀錄', (await sb.from('batting_pa').update({ batter: to }).eq('batter', from)).error)
+    // 代跑 column (absent until the rosters migration runs: nothing to rename then)
+    { const { error } = await sb.from('batting_pa').update({ runner: to }).eq('runner', from); if (error && !/could not find|does not exist/i.test(error.message)) fail('打席紀錄', error) }
+    fail('投球紀錄', (await sb.from('pitching_pa').update({ pitcher: to }).eq('pitcher', from)).error)
+    fail('守備紀錄', (await sb.from('fielding_lines').update({ player: to }).eq('player', from)).error)
+    for (const col of ['winning_pitcher', 'losing_pitcher', 'save_pitcher']) fail('比賽清單', (await sb.from('games').update({ [col]: to }).eq(col, from)).error)
+    fail('球員名單', (await sb.from('players').delete().eq('name', from)).error)
+  }
+  if (players.length) fail('球員名單', (await sb.from('players').upsert(players.map(toPlayerRow), { onConflict: 'name' })).error)
+  if (removed.length) fail('球員名單', (await sb.from('players').delete().in('name', removed)).error)
+}
+
+// ---------------------------------------------------------------- editors allowlist
+/**
+ * 啟用紀錄員權限 for the signed-in account (supabase/migrations/2026-10-08_security.sql): write access belongs to the
+ * account bound to a listed email — bound by the one-time 邀請碼 (from 紀錄員名單), an email code, or the admin.
+ * null when the database does not have the function yet (then the older email check below applies).
+ */
+export type EditorAccess = 'ok' | 'need_code' | 'bad_code' | 'expired' | 'locked' | 'not_listed' | 'taken' | 'not_signed_in'
+export async function claimEditor(code?: string): Promise<EditorAccess | null> {
+  const clean = code?.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  const { data, error } = await supabase().rpc('claim_editor', { code: clean || null })
+  if (error) { if (error.code === 'PGRST202' || error.code === '42883' || /claim_editor/.test(error.message)) return null; throw new Error(error.message) }
+  return data as EditorAccess
+}
+/** Before the security migration: is this signed-in email on the `editors` list? (true when there is no list at all) */
+export async function fetchIsEditor(email: string | undefined | null): Promise<boolean> {
+  if (!email) return false
+  const { data, error } = await supabase().from('editors').select('email').eq('email', email.toLowerCase()).limit(1)
+  if (error) { if (error.code === '42P01' || /editors/.test(error.message)) return true; throw new Error(error.message) }
+  return (data ?? []).length > 0
+}
+
+/** The whole 紀錄員名單 (only editors can read it), oldest first. */
+export async function listEditors(): Promise<Editor[]> {
+  const full = await supabase().from('editors').select('email, note, created_at, user_id, bound_at, invite_expires').order('created_at')
+  if (!full.error) return (full.data ?? []) as Editor[]
+  // before the security migration the binding columns do not exist
+  const { data, error } = await supabase().from('editors').select('email, note, created_at').order('created_at')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as Editor[]
+}
+const missingFn = (e: { code?: string; message: string }, fn: string) => e.code === 'PGRST202' || e.code === '42883' || e.message.includes(fn)
+/** Adds a recorder; returns the one-time 邀請碼 to hand over (null on a database without the security migration). */
+export async function addEditor(email: string, note: string): Promise<string | null> {
+  const { data, error } = await supabase().rpc('add_editor', { p_email: email.trim().toLowerCase(), p_note: note.trim() || null })
+  if (!error) return data as string
+  if (!missingFn(error, 'add_editor')) throw new Error(error.code === '23505' ? '這個 email 已經在名單裡' : error.code === '42501' ? '只有紀錄員可以新增紀錄員' : error.message)
+  const ins = await supabase().from('editors').insert({ email: email.trim().toLowerCase(), note: note.trim() || null })
+  if (ins.error) throw new Error(ins.error.code === '23505' ? '這個 email 已經在名單裡' : ins.error.code === '42501' ? '只有紀錄員可以新增紀錄員' : ins.error.message)
+  return null
+}
+/** New 邀請碼 for someone (forgot password, new account): their old account loses write access until it is used. */
+export async function resetEditor(email: string): Promise<string> {
+  const { data, error } = await supabase().rpc('reset_editor', { p_email: email.trim().toLowerCase() })
+  if (error) throw new Error(missingFn(error, 'reset_editor') ? '資料庫還沒更新：請管理員執行 supabase/migrations/2026-10-08_security.sql' : error.message)
+  return data as string
+}
+/** Removes an editor; the database refuses removing yourself (so the list is never left empty). */
+export async function removeEditor(email: string) {
+  const { data, error } = await supabase().from('editors').delete().eq('email', email.toLowerCase()).select('email')
+  if (error) throw new Error(error.message)
+  if (!data?.length) throw new Error('沒有移除：不能移除自己，或你沒有權限')
+}
+
+// ---------------------------------------------------------------- live-scoring drafts (cross-device continuation)
+export interface CloudDraft<T = unknown> { game_id: string; state: T; updated_by: string | null; updated_at: string }
+const draftsMissing = (e: { message: string; code?: string } | null) => !!e && (e.code === '42P01' || /record_drafts/.test(e.message))
+/** Upsert the in-progress state. Silently a no-op when the table has not been created yet. */
+export async function saveCloudDraft(gameId: string, state: unknown, _email?: string | null): Promise<boolean> {
+  if (isPracticeId(gameId)) return true   // 練習紀錄 never leaves the device
+  // updated_by is stamped by the database with the recorder's name (the live page reads this table publicly)
+  const { error } = await supabase().from('record_drafts').upsert({ game_id: gameId, state, updated_at: new Date().toISOString() }, { onConflict: 'game_id' })
+  if (draftsMissing(error)) return false
+  if (error) throw new Error(error.message)
+  return true
+}
+export async function listCloudDrafts<T = unknown>(): Promise<CloudDraft<T>[] | null> {
+  const { data, error } = await supabase().from('record_drafts').select('*').order('updated_at', { ascending: false })
+  if (draftsMissing(error)) return null
+  if (error) throw new Error(error.message)
+  return (data ?? []) as CloudDraft<T>[]
+}
+/** What the site-wide 「比賽進行中」 check reads of each draft: a few fields, never the whole recording state. */
+export interface CloudDraftHead { game_id: string; updated_at: string; finished: boolean | null; practice: boolean | null; suspended?: string | null }
+/** The drafts' heads (game id, time, finished / practice), for the 30 s check every page runs; null = no table yet. */
+export async function listCloudDraftHeads(): Promise<CloudDraftHead[] | null> {
+  const { data, error } = await supabase().from('record_drafts')
+    .select('game_id, updated_at, finished:state->finished, practice:state->practice, suspended:state->suspended')
+    .order('updated_at', { ascending: false })
+  if (draftsMissing(error)) return null
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as CloudDraftHead[]
+}
+export async function deleteCloudDraft(gameId: string) {
+  const { error } = await supabase().from('record_drafts').delete().eq('game_id', gameId)
+  if (error && !draftsMissing(error)) throw new Error(error.message)
+}
+
+export async function deleteCloudGame(id: string) {
+  const { error } = await supabase().from('games').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+// ---------------------------------------------------------------- auth
+export async function currentUser(): Promise<User | null> {
+  const { data } = await supabase().auth.getSession()
+  return data.session?.user ?? null
+}
+export async function signInWithPassword(email: string, password: string) {
+  const { error } = await supabase().auth.signInWithPassword({ email, password })
+  if (error) throw new Error(error.message === 'Invalid login credentials' ? 'email 或密碼錯誤' : error.message)
+}
+/**
+ * 第一次使用: create a password account and sign in. Writing still needs the email on the 紀錄員名單.
+ * Needs Supabase → Authentication → Sign In / Providers → Email: "Allow new users to sign up" on, "Confirm email" off.
+ */
+export async function signUpWithPassword(email: string, password: string) {
+  const { data, error } = await supabase().auth.signUp({ email, password })
+  if (error) throw new Error(/already registered/i.test(error.message) ? '這個 email 已經有帳號，請改用「密碼登入」；如果不是你本人建立的，請找紀錄員重發邀請碼' : /signups? not allowed/i.test(error.message) ? '目前沒有開放設定密碼，請找管理員' : error.message)
+  // an existing account comes back without identities (Supabase hides that it exists)
+  if (data.user && !data.user.identities?.length) throw new Error('這個 email 已經有帳號，請改用「密碼登入」；如果不是你本人建立的，請找紀錄員重發邀請碼')
+  if (!data.session) throw new Error('帳號已建立，但需要先到信箱確認；請管理員到 Supabase 關閉「Confirm email」')
+}
+export async function signOut() {
+  // a 快速登入 session ends with it (supabase/migrations/2026-10-10_quick_login.sql)
+  const { data } = await supabase().auth.getSession()
+  if (data.session?.user.is_anonymous) await supabase().rpc('quick_logout').then(() => undefined, () => undefined)
+  await supabase().auth.signOut()
+}
+
+// ---------------------------------------------------------------- 快速登入 (supabase/migrations/2026-10-10_quick_login.sql)
+const QUICK_SQL = '資料庫還沒有快速登入：請管理員在 Supabase 執行 supabase/migrations/2026-10-10_quick_login.sql'
+const quickMissing = (e: { code?: string; message: string }) => e.code === 'PGRST202' || e.code === '42883' || /quick_login/.test(e.message)
+/**
+ * 快速登入: the shared password makes this device a recorder for some days, without an account of its own. The site
+ * signs in anonymously (a throwaway account), and the database checks the password (it never comes to the site) and
+ * records the account as a quick session. A wrong password leaves nobody signed in.
+ * Needs Supabase → Authentication → Sign In / Providers → "Allow anonymous sign-ins".
+ */
+export async function quickSignIn(code: string) {
+  const sb = supabase()
+  const { data: had } = await sb.auth.getSession()
+  if (had.session && !had.session.user.is_anonymous) throw new Error('你已經用自己的帳號登入了，不需要快速登入')
+  if (!had.session) {
+    const { error } = await sb.auth.signInAnonymously()
+    if (error) throw new Error(/anonymous/i.test(error.message) ? '快速登入還沒開啟：管理員要到 Supabase → Authentication → Sign In / Providers 打開「Allow anonymous sign-ins」' : error.message)
+  }
+  const { data, error } = await sb.rpc('quick_login', { p_code: code.trim() })
+  if (!error && data === 'ok') return
+  await sb.auth.signOut()
+  if (error) throw new Error(quickMissing(error) ? QUICK_SQL : error.message)
+  throw new Error(data === 'bad' ? '快速登入密碼不對' : data === 'locked' ? '密碼錯太多次，快速登入暫停一小時；也可以改用 email 登入' : data === 'off' ? '快速登入還沒設定：請紀錄員到「資料匯入」頁設定快速登入密碼' : '快速登入沒有成功，請再試一次')
+}
+export interface QuickLoginStatus { enabled: boolean; days: number; active: number; locked_until: string | null; updated_at: string | null; updated_by: string | null }
+/** The 快速登入 settings (recorders signed in with their own account); null when the database does not have it yet. */
+export async function fetchQuickLogin(): Promise<QuickLoginStatus | null> {
+  const { data, error } = await supabase().rpc('quick_login_status')
+  if (error) { if (quickMissing(error)) return null; throw new Error(error.message) }
+  return data as QuickLoginStatus
+}
+/** Sets the shared password (empty: turns quick login off). Every device signed in with the old one is signed out. */
+export async function saveQuickLogin(code: string, days: number) {
+  const { error } = await supabase().rpc('set_quick_login', { p_code: code.trim() || null, p_days: days })
+  // 永久 (0) needs supabase/migrations/2026-10-11_quick_login_forever.sql
+  if (error && days === 0 && /1 到 365/.test(error.message) && !/永久/.test(error.message)) throw new Error('「永久」需要資料庫更新：請管理員在 Supabase 執行 supabase/migrations/2026-10-12_quick_login_fix.sql')
+  if (error) throw new Error(quickMissing(error) ? QUICK_SQL : error.message)
+}
+/** Lift the pause after 10 wrong 快速登入 passwords, keeping the password (own-account recorders; 2026-10-13_save_games.sql). */
+export async function unlockQuickLogin() {
+  const { error } = await supabase().rpc('unlock_quick_login')
+  if (error && (error.code === 'PGRST202' || error.code === '42883')) throw new Error('「解除暫停」需要資料庫更新：請管理員在 Supabase 執行 supabase/migrations/2026-10-13_save_games.sql（或直接重新設定一次密碼，也會解除）')
+  if (error) throw new Error(error.message)
+}
+/** The signed-in account's own password (8+ characters). */
+export async function setOwnPassword(password: string) {
+  const { error } = await supabase().auth.updateUser({ password })
+  if (error) throw new Error(/same/i.test(error.message) ? '新密碼不能和舊密碼一樣' : error.message)
+}
+/** Sign out every other device of this account (after taking it over with a 邀請碼). */
+export async function signOutOtherDevices() { await supabase().auth.signOut({ scope: 'others' }) }
+export function onAuthChange(cb: (user: User | null) => void) {
+  const { data } = supabase().auth.onAuthStateChange((_e, session) => cb(session?.user ?? null))
+  return () => data.subscription.unsubscribe()
+}
+
+/** Refetch whenever any table changes (debounced). registrations is subscribed separately (subscribeRegistrationChanges),
+ *  only once the table is known to exist: a missing table in this channel would break live refresh for all of them. */
+export function subscribeCloudChanges(onChange: () => void): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const bump = () => { if (timer) clearTimeout(timer); timer = setTimeout(onChange, 800) }
+  const ch = supabase().channel('bafin-data')
+  for (const table of ['games', 'batting_pa', 'pitching_pa', 'fielding_lines', 'players']) ch.on('postgres_changes', { event: '*', schema: 'public', table }, bump)
+  ch.subscribe()
+  return () => { if (timer) clearTimeout(timer); void supabase().removeChannel(ch) }
+}
+/** Live refresh of 報名名單 (debounced). Call only after fetchRegistrations returned rows (table exists). */
+export function subscribeRegistrationChanges(onChange: () => void): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const ch = supabase().channel('bafin-registrations')
+  ch.on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, () => { if (timer) clearTimeout(timer); timer = setTimeout(onChange, 800) })
+  ch.subscribe()
+  return () => { if (timer) clearTimeout(timer); void supabase().removeChannel(ch) }
+}
+
+// ---------------------------------------------------------------- album links (Google Drive folders etc.)
+export interface AlbumRow { id: string; game_id: string | null; title: string | null; date: string | null; url: string; photographer: string | null; note: string | null; created_by: string | null; created_at: string; updated_at: string }
+/** Returns null when the albums table does not exist yet. */
+export async function fetchAlbums(): Promise<AlbumRow[] | null> {
+  const { data, error } = await supabase().from('albums').select('*').order('date', { ascending: false, nullsFirst: false }).limit(2000)
+  if (error) { if (error.code === '42P01' || /albums/.test(error.message)) return null; throw new Error(error.message) }
+  return (data ?? []) as AlbumRow[]
+}
+export async function upsertAlbum(row: Omit<AlbumRow, 'created_at' | 'updated_at'> & { id?: string }): Promise<AlbumRow> {
+  const { data, error } = await supabase().from('albums').upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: 'id' }).select('*').single()
+  if (error) throw new Error(/row-level security/.test(error.message) ? '你的帳號不在紀錄員名單，無法寫入' : error.message)
+  return data as AlbumRow
+}
+export async function deleteAlbumRow(id: string) {
+  const { error } = await supabase().from('albums').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+// ---------------------------------------------------------------- tournament registration lists (報名名單)
+export interface RegistrationRow { season: number; tournament: string; players: string[]; updated_by: string | null; updated_at: string }
+const registrationsMissing = (e: PgError | null) => !!e && (e.code === '42P01' || e.code === 'PGRST205' || /registrations/.test(e.message))
+const registrationsError = (e: PgError) => new Error(/row-level security/.test(e.message) ? '你的帳號不在紀錄員名單，無法寫入' : registrationsMissing(e) ? '報名名單需要管理員先在 Supabase 執行 supabase/schema.sql' : e.message)
+/** Returns null when the registrations table does not exist yet (supabase/schema.sql not run). */
+export async function fetchRegistrations(): Promise<RegistrationRow[] | null> {
+  const { data, error } = await supabase().from('registrations').select('*').order('season', { ascending: false }).order('tournament', { ascending: true })
+  if (error) { if (registrationsMissing(error)) return null; throw new Error(error.message) }
+  return (data ?? []) as RegistrationRow[]
+}
+export async function upsertRegistration(row: Omit<RegistrationRow, 'updated_at'>): Promise<RegistrationRow> {
+  const { data, error } = await supabase().from('registrations').upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: 'season,tournament' }).select('*').single()
+  if (error) throw registrationsError(error)
+  return data as RegistrationRow
+}
+export async function deleteRegistrationRow(season: number, tournament: string) {
+  const { error } = await supabase().from('registrations').delete().eq('season', season).eq('tournament', tournament)
+  if (error) throw registrationsError(error)
+}

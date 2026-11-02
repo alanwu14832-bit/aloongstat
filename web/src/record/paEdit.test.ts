@@ -1,0 +1,176 @@
+import { describe, expect, it } from 'vitest'
+import { applyOppBats, applyOppPitcher, oppSlotRowsOf, oppStintOf, rowName, applyRunEvent, basePath, runEnding, blankBattingAt, blankPitchingAt, codeFor, lastPitchFor, startBase, stillOn, toggleBase, undoRunStep, withResult, withRun } from './paEdit'
+import type { BattingPA, PitchingPA } from '../data/types'
+import { oppPitcherMarks } from '../data/broadcast'
+
+const bat = (p: Partial<BattingPA>): BattingPA => ({ gameId: 'G', inning: 1, batter: '甲', pitches: [], result: '', sb: 0, cs: 0, advOnError: 0, outOnBase: 0, run: 0, rbi: 0, ...p })
+const pit = (p: Partial<PitchingPA>): PitchingPA => ({ gameId: 'G', inning: 1, pitcher: '壬', pitches: [], result: '', sba: 0, cs: 0, wp: 0, pb: 0, pk: 0, ...p })
+
+describe('editing one plate appearance with the recording buttons', () => {
+  it('an out gets its out code from 出局(前); a double play counts two; hand-set L / R / ER stay', () => {
+    expect(codeFor('內滾', 0, undefined)).toBe('I')
+    expect(codeFor('外飛', 2, 'I')).toBe('III')
+    expect(codeFor('雙殺', 1, undefined)).toBe('III')
+    expect(codeFor('三振', undefined, undefined)).toBeUndefined()
+    expect(codeFor('一安', 1, 'II')).toBeUndefined()
+    expect(codeFor('一安', 1, 'R')).toBe('R')
+    expect(codeFor('內飛', 1, 'L')).toBe('L')
+  })
+  it('changing the result adds the ball-in-play pitch and clears batted-ball fields when there is none', () => {
+    const a = withResult(bat({ pitches: ['B', 'CS', 'F'], result: '一安', loc: 8, traj: 'L', quality: '強', outsBefore: 1 }), '外飛')
+    expect(a).toMatchObject({ result: '外飛', pitches: ['B', 'CS', 'IP'], code: 'II', loc: 8 })
+    const k = withResult(bat({ pitches: ['CS', 'SS', 'SS'], result: '內滾', loc: 6, traj: 'G', code: 'I', outsBefore: 0 }), '三振')
+    expect(k.pitches).toEqual(['CS', 'SS', 'SS'])
+    expect(k).not.toHaveProperty('loc'); expect(k).not.toHaveProperty('traj')
+    expect(k.code).toBe('I')
+    const bb = withResult(pit({ result: '內滾', code: 'II', outsBefore: 1 }), '保送')
+    expect(bb).not.toHaveProperty('code')
+  })
+  it('the last pitch follows the new result', () => {
+    expect(lastPitchFor(['CS', 'B', 'SS'], '二安')).toEqual(['CS', 'B', 'IP'])
+    expect(lastPitchFor(['CS', 'B', 'IP'], '三振')).toEqual(['CS', 'B', 'SS'])
+    expect(lastPitchFor(['B', 'B', 'B', 'IP'], '保送')).toEqual(['B', 'B', 'B', 'B'])
+    expect(lastPitchFor(['B', 'IP'], '觸身')).toEqual(['B', 'HP'])
+    expect(lastPitchFor(['CS', 'CS', 'CS'], '三振')).toEqual(['CS', 'CS', 'CS'])
+    expect(withResult(bat({ pitches: ['CS', 'SS', 'SS'], result: '三振', code: 'II', outsBefore: 1 }), '二安')).toMatchObject({ pitches: ['CS', 'SS', 'IP'] })
+  })
+  it('得分 moves the R code with it', () => {
+    expect(withRun(bat({ result: '一安' }), 1)).toMatchObject({ run: 1, code: 'R' })
+    expect(withRun(bat({ result: '一安', code: 'L' }), 1).code).toBe('R')
+    expect(withRun(bat({ result: '一安', run: 1, code: 'R' }), 0)).not.toHaveProperty('code')
+    expect(withRun(bat({ result: '一安' }), 5).run).toBe(1)
+  })
+  it('壘上(前) toggles one base at a time', () => {
+    expect(toggleBase('無', 1)).toBe('1')
+    expect(toggleBase('1', 3)).toBe('13')
+    expect(toggleBase('13', 1)).toBe('3')
+    expect(toggleBase('3', 3)).toBe('無')
+    expect(toggleBase(undefined, 2)).toBe('2')
+  })
+  it('an inserted row continues the order with whoever holds that slot (a 代跑 took it over)', () => {
+    const rows = [bat({ order: 1, batter: '甲', pos: 'SS' }), bat({ order: 2, batter: '乙', pos: 'C', runner: '癸' }), bat({ order: 3, batter: '丙', inning: 2 }), bat({ order: 2, batter: '乙', inning: 1 })]
+    expect(blankBattingAt(rows, 1, 'G')).toMatchObject({ order: 2, batter: '乙', pos: 'C', inning: 1 })
+    expect(blankBattingAt(rows, 3, 'G')).toMatchObject({ order: 4, batter: '', inning: 2 })
+    const r = blankBattingAt(rows.slice(0, 2), 2, 'G')
+    expect(r).toMatchObject({ order: 3, batter: '' })
+    const afterPr = blankBattingAt([bat({ order: 9, batter: '壬' }), bat({ order: 1, batter: '甲', runner: '癸' }), bat({ order: 2, batter: '乙' })], 3, 'G')
+    expect(afterPr).toMatchObject({ order: 3 })
+    expect(blankBattingAt([bat({ order: 1, batter: '甲', runner: '癸' }), bat({ order: 9, batter: '壬' })], 2, 'G')).toMatchObject({ order: 1, batter: '癸' })
+    expect(blankBattingAt([bat({ order: 1, batter: '甲', runner: '癸' }), bat({ order: 9, batter: '壬' })], 2, 'G')).not.toHaveProperty('pos')
+    expect(blankBattingAt([], 0, 'G')).toMatchObject({ order: 1, inning: 1, batter: '' })
+    expect(blankPitchingAt([pit({ oppOrder: 4, pitcher: '子', inning: 3 })], 1, 'G')).toMatchObject({ oppOrder: 5, pitcher: '子', inning: 3 })
+    expect(blankPitchingAt([pit({ oppOrder: 4, pitcher: '子', inning: 3 })], 0, 'G')).toMatchObject({ oppOrder: 1, pitcher: '子', inning: 3 })
+    // 「在前面插入」 at the 2nd inning's first batter: it is the 2nd inning's
+    expect(blankBattingAt(rows.slice(0, 3), 2, 'G', 2)).toMatchObject({ order: 3, inning: 2 })
+    expect(blankPitchingAt([pit({ oppOrder: 3, inning: 1 }), pit({ oppOrder: 4, inning: 2, oppBats: 'L' })], 1, 'G', 2)).toMatchObject({ oppOrder: 4, inning: 2 })
+  })
+})
+
+describe('base running of our batter after he reached', () => {
+  it('a single plus an error, a steal, then home', () => {
+    let p = bat({ result: '一安' })
+    expect(startBase(p)).toBe(1); expect(stillOn(p)).toBe(true)
+    p = applyRunEvent(p, 'err'); p = applyRunEvent(p, 'sb'); p = applyRunEvent(p, 'score')
+    expect(p).toMatchObject({ advOnError: 1, sb: 1, run: 1, code: 'R' })
+    expect(basePath(p).map((s) => `${s.label}${s.base ?? ''}${s.end ?? ''}`)).toEqual(['一安1', '失誤進壘2', '盜壘3', '得分run'])
+    expect(stillOn(p)).toBe(false)
+    p = undoRunStep(p); expect(p).toMatchObject({ run: 0, sb: 1 }); expect(p).not.toHaveProperty('code')
+    p = undoRunStep(p); expect(p.sb).toBe(0)
+    p = undoRunStep(p); expect(p.advOnError).toBe(0)
+  })
+  it('caught stealing, picked off, left on base; outs at the plate have no path', () => {
+    expect(applyRunEvent(bat({ result: '保送', code: 'L' }), 'cs')).toMatchObject({ cs: 1 })
+    expect(applyRunEvent(bat({ result: '保送', code: 'L' }), 'cs')).not.toHaveProperty('code')
+    expect(basePath(applyRunEvent(bat({ result: '二安' }), 'pk')).at(-1)).toMatchObject({ end: 'out' })
+    expect(applyRunEvent(bat({ result: '三安', run: 1, code: 'R' }), 'stranded')).toMatchObject({ run: 0, code: 'L' })
+    expect(basePath(bat({ result: '內滾', code: 'I' }))).toEqual([])
+    expect(startBase(bat({ result: '三振', code: 'L' }))).toBe(1) // 不死三振 and left on base
+    expect(basePath(bat({ result: '全壘打', run: 1, code: 'R' }))).toEqual([{ label: '全壘打', end: 'run' }])
+  })
+  it('a steal can be added after the ending; a new ending replaces the old one', () => {
+    let p = applyRunEvent(bat({ result: '一安' }), 'score')
+    p = applyRunEvent(p, 'err')
+    expect(p).toMatchObject({ run: 1, code: 'R', advOnError: 1 })
+    expect(runEnding(p)).toBe('score')
+    p = applyRunEvent(p, 'cs')
+    expect(p).toMatchObject({ run: 0, cs: 1, advOnError: 1 }); expect(p).not.toHaveProperty('code')
+    p = applyRunEvent({ ...p, code: 'II' }, 'stranded')
+    expect(p).toMatchObject({ cs: 0, outOnBase: 0, code: 'L' })
+    expect(runEnding(bat({ result: '一安' }))).toBeNull()
+  })
+})
+
+describe('對方投手 and 對方打者 in 修改資料', () => {
+  const R王 = { oppHand: 'R' as const, oppPitcher: '王' }, L林 = { oppHand: 'L' as const, oppPitcher: '林' }
+  const opp = (rows: BattingPA[]) => rows.map((r) => `${r.oppHand ?? '-'}${r.oppPitcher ?? '-'}`)
+  it('a change goes to the rest of that pitcher\'s stint, never past the next change', () => {
+    const rows = [bat(R王), bat(R王), bat(R王), bat(L林), bat(L林)]
+    expect(opp(applyOppPitcher(rows, 1, { oppHand: 'L', oppPitcher: '陳' }))).toEqual(['R王', 'L陳', 'L陳', 'L林', 'L林'])
+    expect(opp(rows)).toEqual(['R王', 'R王', 'R王', 'L林', 'L林'])
+  })
+  it('batch 15: a hand-only fix on a stint\'s first row fixes the whole stint (the wrong 左投 rows join the 右投 after them)', () => {
+    const L = { oppHand: 'L' as const }, R = { oppHand: 'R' as const }
+    const rows = [bat(L), bat(L), bat(L), bat(R), bat(R)]
+    const out = applyOppPitcher(rows, 0, { oppHand: 'R' })
+    expect(opp(out)).toEqual(['R-', 'R-', 'R-', 'R-', 'R-'])
+    expect([...oppPitcherMarks(out).values()]).toEqual(['對方先發・右投'])
+    expect([...oppPitcherMarks(rows).values()]).toEqual(['對方先發・左投', '對方換投・右投'])
+  })
+  it('batch 15: on a later row of a stint, 整段都改 changes the whole stint, 從這個打席起換投 only from there', () => {
+    const rows = [bat(R王), bat(L林), bat(L林), bat(L林), bat(R王)]
+    expect(oppStintOf(rows, 2)).toEqual([1, 3])
+    expect(oppStintOf(rows, 0)).toEqual([0, 0])
+    expect(opp(applyOppPitcher(rows, 2, { oppHand: 'R', oppPitcher: '林' }, 'stint'))).toEqual(['R王', 'R林', 'R林', 'R林', 'R王'])
+    expect(opp(applyOppPitcher(rows, 2, { oppHand: 'R', oppPitcher: '陳' }, 'from'))).toEqual(['R王', 'L林', 'R陳', 'R陳', 'R王'])
+    // a stint never runs into the next game
+    expect(oppStintOf([bat(R王), bat({ ...R王, gameId: 'H' })], 0)).toEqual([0, 0])
+  })
+  it('rows without one: every row of that game, not the next game\'s', () => {
+    const rows = [bat({}), bat({}), bat({ gameId: 'H' })]
+    expect(opp(applyOppPitcher(rows, 0, { oppHand: 'R' }))).toEqual(['R-', 'R-', '--'])
+  })
+  it('clearing removes the keys', () => {
+    const out = applyOppPitcher([bat(R王), bat(R王)], 0, { oppPitcher: ' ' })
+    expect(out.every((r) => !('oppHand' in r) && !('oppPitcher' in r))).toBe(true)
+  })
+  it('a new blank row takes the opponent pitcher of the row before (or after), and the batter of that slot', () => {
+    expect(blankBattingAt([bat(R王), bat(L林)], 1, 'G')).toMatchObject(R王)
+    expect(blankBattingAt([bat(L林)], 0, 'G')).toMatchObject(L林)
+    expect('oppHand' in blankBattingAt([bat({})], 1, 'G')).toBe(false)
+    const rows = [pit({ oppOrder: 1, oppBatter: 'A1' }), pit({ oppOrder: 2, oppBatter: 'A2' }), pit({ oppOrder: 9 })]
+    expect(blankPitchingAt(rows, 3, 'G')).toMatchObject({ oppOrder: 1, oppBatter: 'A1' })
+    expect('oppBatter' in blankPitchingAt([pit({ oppOrder: 1 })], 1, 'G')).toBe(false)
+  })
+})
+
+describe('rowName (修改資料 runner timeline)', () => {
+  it('names the runner on base but the man who batted on his own line', () => {
+    const o = pit({ oppOrder: 3, result: '一安', runner: '12號' })
+    expect(rowName('pit', o)).toBe('對方 12號')
+    expect(rowName('pit', o, true)).toBe('對方 3 棒')
+    expect(rowName('pit', { ...o, oppBatter: '王' }, true)).toBe('對方 王')
+    expect(rowName('pit', { ...o, runner: '對方代跑' })).toBe('對方代跑')
+    const b = bat({ batter: '甲', runner: '乙' })
+    expect(rowName('bat', b)).toBe('乙')
+    expect(rowName('bat', b, true)).toBe('甲')
+    expect(rowName('bat', bat({ batter: '' }))).toBe('（未填）')
+    expect(rowName('pit', undefined)).toBe('')
+  })
+})
+
+describe('修改資料: 對方打者左右打 (batch 18)', () => {
+  // slot 3 bats three times: 甲 twice, then 對方代打 99號; slot 4 once
+  const rows = [pit({ oppOrder: 3, oppBats: 'L', result: '三振' }), pit({ oppOrder: 4, result: '三振' }), pit({ oppOrder: 3, inning: 3, result: '三振' }), pit({ oppOrder: 3, inning: 5, oppBatter: '代打 99號', oppBats: 'L', result: '三振' })]
+  it('his plate appearances this game: the same slot, the same man (a 對方代打 is someone else)', () => {
+    expect(oppSlotRowsOf(rows, 0)).toEqual([0, 2])
+    expect(oppSlotRowsOf(rows, 3)).toEqual([3])
+    expect(oppSlotRowsOf([...rows, pit({ gameId: 'H', oppOrder: 3 })], 0)).toEqual([0, 2])
+  })
+  it('整段（同一棒這場）都改 changes all of them, 只改這個打席 one; 不知道 leaves the key out', () => {
+    expect(applyOppBats(rows, 2, 'R', 'slot').map((p) => p.oppBats)).toEqual(['R', undefined, 'R', 'L'])
+    expect(applyOppBats(rows, 2, 'R', 'one').map((p) => p.oppBats)).toEqual(['L', undefined, 'R', 'L'])
+    const out = applyOppBats(rows, 0, undefined, 'slot')
+    expect('oppBats' in out[0] || 'oppBats' in out[2]).toBe(false)
+    expect(out[3].oppBats).toBe('L')
+  })
+})

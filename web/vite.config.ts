@@ -1,0 +1,78 @@
+/// <reference types="vitest/config" />
+import { defineConfig, loadEnv, type Plugin } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import { accentCss, assetUrl, resolveTeam, type TeamConfig } from './src/config/teamDefaults'
+import { contentSecurityPolicy } from './src/config/security'
+import { escapeHtml, socialMeta } from './src/config/social'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+/**
+ * Puts this deployment's team (VITE_TEAM_*, see src/config/teamDefaults.ts) into the parts the app cannot
+ * set itself: the page title, link-preview and home-screen tags in index.html, and the web app manifest.
+ */
+function teamSite(): Plugin {
+  let team: TeamConfig
+  let base = '/'
+  let supabaseUrl: string | undefined
+  let publicDir = ''
+  // the 1200×630 link-preview picture: a full URL, or a file that is really in web/public (else the logo is used)
+  const hasOgImage = () => /^https?:/.test(team.ogImage) || (!!publicDir && existsSync(resolve(publicDir, team.ogImage)))
+  const manifest = () => JSON.stringify({
+    name: team.org, short_name: team.short, lang: 'zh-TW', start_url: base, scope: base, display: 'standalone',
+    background_color: '#f5f5f7', theme_color: '#f5f5f7',
+    icons: [{ src: assetUrl(team.mark, base), sizes: 'any', type: 'image/png', purpose: 'any' }],
+  }, null, 2)
+  return {
+    name: 'team-site',
+    // A build-time constant, so the site (which starts empty) does not ship the sample games in src/data/seed at
+    // all — not just hidden. The tests always get them: they are the fixtures. src/data/seed.ts reads it.
+    config(_, { mode }) {
+      const seed = mode === 'test' || resolveTeam(loadEnv(mode, process.cwd(), 'VITE_')).seed
+      return { define: { __TEAM_SEED__: JSON.stringify(seed) } }
+    },
+    configResolved(config) {
+      const env = loadEnv(config.mode, config.envDir || process.cwd(), 'VITE_')
+      team = resolveTeam(env)
+      supabaseUrl = env.VITE_SUPABASE_URL
+      base = config.base
+      publicDir = config.publicDir
+    },
+    transformIndexHtml: (html, ctx) => html
+      // the built site only (the dev server needs inline scripts and its own websocket)
+      .replace('<meta charset="UTF-8" />', ctx.server ? '<meta charset="UTF-8" />' : `<meta charset="UTF-8" />\n    <meta http-equiv="Content-Security-Policy" content="${escapeHtml(contentSecurityPolicy(supabaseUrl))}" />`)
+      .replaceAll('%TEAM_ORG%', escapeHtml(team.org))
+      .replaceAll('%TEAM_SHORT%', escapeHtml(team.short))
+      .replaceAll('%TEAM_MARK%', escapeHtml(assetUrl(team.mark, base)))
+      .replaceAll('%BASE%', escapeHtml(base))
+      .replace('%SOCIAL_META%', socialMeta(team, base, { hasOgImage: hasOgImage() }))
+      .replace('</head>', `<style id="team-accent">${accentCss(team)}</style>\n  </head>`),
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!req.url?.endsWith('/manifest.webmanifest')) return next()
+        res.setHeader('Content-Type', 'application/manifest+json')
+        res.end(manifest())
+      })
+    },
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'manifest.webmanifest', source: manifest() })
+    },
+  }
+}
+
+export default defineConfig({
+  base: process.env.VITE_BASE ?? '/',
+  plugins: [react(), tailwindcss(), teamSite()],
+  build: {
+    chunkSizeWarningLimit: 1500,
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+    css: false,
+    // The fixtures (src/data/seed, ../data) are BaFiN's sample games: tests run as that team.
+    env: { VITE_TEAM_NAME: '喝FIN就好BA', VITE_TEAM_INNINGS: '7' },
+  },
+})

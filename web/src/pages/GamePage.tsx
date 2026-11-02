@@ -1,0 +1,33 @@
+import { useMemo } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Card } from '../components/ui/Card'
+import { EmptyState } from '../components/ui/EmptyState'
+import { Button } from '../components/ui/Button'
+import { GameView, type GameTab } from './GameView'
+import { useStats } from '../hooks/useStats'
+import { storedId } from '../data/intrasquad'
+import { summarizeGame } from '../data/stats'
+import { useLiveIds } from '../hooks/useLiveGames'
+
+const TABS: GameTab[] = ['summary', 'box', 'bat', 'pit', 'feed', 'roster']
+
+/**
+ * The full game page (/games/:id): the same game as the quick view on 比賽, on its own page so it can be read at
+ * length, shared, and linked straight to a tab or a half-inning (?tab=bat&inning=3). Closing returns to the list.
+ */
+export function GamePage() {
+  const { id = '' } = useParams()
+  const [params] = useSearchParams()
+  const navigate = useNavigate()
+  const s = useStats()
+  // (whatever the filter says; a 隊內賽 side's id opens the game it was made from)
+  const game = s.full.games.find((g) => g.id === storedId(id))
+  // (and again when the game starts or stops being recorded: 比賽進行中 instead of 勝／敗)
+  const live = useLiveIds()
+  const summary = useMemo(() => (game ? summarizeGame(s.full, game, live) : null), [game, s.full, live])
+  const tab = params.get('tab') as GameTab | null
+  const inning = Number(params.get('inning')) || undefined
+  const back = () => (window.history.length > 1 ? navigate(-1) : navigate('/games?view=results'))
+  if (!summary) return <Card><EmptyState title="找不到這場比賽" description={`比賽 ID ${id} 不在目前的資料裡。`} action={<Button size="sm" variant="outline" to="/games?view=results">回比賽列表</Button>} /></Card>
+  return <GameView key={game!.id} summary={summary} mode="page" onClose={back} initialTab={tab && TABS.includes(tab) ? tab : inning ? 'bat' : 'summary'} inning={inning} />
+}

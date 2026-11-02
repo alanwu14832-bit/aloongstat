@@ -1,0 +1,267 @@
+/**
+ * Editing one plate appearance of a finished game with the recording buttons. Each change keeps the row
+ * consistent the way live recording would have written it (IP pitch for a ball in play, out code, R code),
+ * but never overwrites what the recorder set by hand on purpose (L, R, ER stay).
+ */
+import { END_PITCH, isDouble, isNoBatter, isPA, isPlaced, OPP_PR_UNNAMED, orderCycle, type BattingPA, type OppBats, type OppHand, type PitchingPA } from '../data/types'
+import { oppKey } from '../data/opponent'
+import { BIP_RESULTS, OUT_RESULTS, withInPlay } from './model'
+import { NO_BATTED_BALL } from './widgets'
+
+const END_PITCH_CODES = new Set<string>(Object.values(END_PITCH))
+
+type PA = BattingPA | PitchingPA
+const OUT_CODES = new Set(['I', 'II', 'III'])
+const ROMAN = ['I', 'II', 'III'] as const
+
+/**
+ * Who a row is in the 修改資料 runner timeline. On base he is the runner (a 代跑 on that row takes over from the
+ * plate appearance on); `asBatter` names the man who batted, for the batter's own line and messages about him.
+ */
+export function rowName(side: 'bat' | 'pit', r: BattingPA | PitchingPA | undefined, asBatter = false): string {
+  if (!r) return ''
+  if (side === 'bat') { const b = r as BattingPA; return (!asBatter && b.runner) || b.batter || '（未填）' }
+  const o = r as PitchingPA
+  // (a 對方代跑 is called by his name, like ours)
+  if (!asBatter && o.runner) return o.runner === OPP_PR_UNNAMED ? OPP_PR_UNNAMED : `對方 ${o.runner}`
+  return `對方${o.oppBatter ? ` ${o.oppBatter}` : o.oppOrder ? ` ${o.oppOrder} 棒` : ''}`
+}
+
+/** Code for a new result: an out gets I／II／III from 出局(前) (雙殺 counts two), a non-out drops a stale out code. */
+export function codeFor(result: string, outsBefore: number | undefined, code: string | undefined): string | undefined {
+  const current = code || undefined
+  if (OUT_RESULTS.has(result)) {
+    if (current && !OUT_CODES.has(current)) return current
+    if (outsBefore === undefined) return current
+    return ROMAN[Math.min(2, outsBefore + (result === '雙殺' ? 1 : 0))]
+  }
+  return current && OUT_CODES.has(current) ? undefined : current
+}
+
+/** The last pitch follows a changed result: a ball in play ends on IP (a swinging strike becomes contact), a
+ *  strikeout on a swinging strike, a walk on a ball; an HBP / interference ends on its HP / CI pitch. */
+export function lastPitchFor(pitches: string[], result: string): string[] {
+  // (an HP / CI left from the result it was before goes; the new 觸身／妨礙 gets its own — in place of an IP)
+  const end = END_PITCH[result]
+  const bare = END_PITCH_CODES.has(pitches[pitches.length - 1]) && pitches[pitches.length - 1] !== end ? pitches.slice(0, -1) : pitches
+  if (end) return withInPlay(bare[bare.length - 1] === 'IP' ? bare.slice(0, -1) : bare, result)
+  pitches = bare
+  const last = pitches[pitches.length - 1]
+  if (BIP_RESULTS.has(result)) return last === 'SS' ? [...pitches.slice(0, -1), 'IP'] : withInPlay(pitches, result)
+  if (last !== 'IP') return pitches
+  const head = pitches.slice(0, -1)
+  return result === '三振' ? [...head, 'SS'] : result === '保送' || result === '故四' ? [...head, 'B'] : head
+}
+
+/** New result: ball-in-play pitch added, batted-ball fields cleared when there is no batted ball, code updated. */
+export function withResult<T extends PA>(pa: T, result: string): T {
+  const next = { ...pa, result, pitches: lastPitchFor(pa.pitches, result), code: codeFor(result, pa.outsBefore, pa.code) }
+  if (NO_BATTED_BALL.has(result)) { delete next.loc; delete next.traj; delete next.quality }
+  if (!next.code) delete next.code
+  return next
+}
+
+/** 得分 for our batter, with the R code following it (a run is R; taking it away clears R). */
+export function withRun(pa: BattingPA, run: number): BattingPA {
+  const next: BattingPA = { ...pa, run: Math.max(0, Math.min(1, run)) }
+  if (next.run && (!next.code || next.code === 'L')) next.code = 'R'
+  if (!next.run && next.code === 'R') delete next.code
+  return next
+}
+
+/** 壘上(前) as three toggles: '12' ⇄ {1, 2}; no runner is 無. */
+export function toggleBase(bases: string | undefined, base: 1 | 2 | 3): string {
+  const set = new Set<string>((bases ?? '').replace('無', '').split('').filter((c) => c === '1' || c === '2' || c === '3'))
+  const k = String(base)
+  if (set.has(k)) set.delete(k); else set.add(k)
+  return [...set].sort().join('') || '無'
+}
+
+/** A blank batting row to insert at index `at`: the inning of the row before it (or `inning`, the row it was inserted
+ *  next to — 「在前面插入」 at an inning's first batter belongs to that inning), the next slot, and whoever holds that
+ *  slot by then (the last batter there, or his 代跑, who took the slot over). */
+export function blankBattingAt(rows: BattingPA[], at: number, gameId: string, inning?: number): BattingPA {
+  const prev = rows[at - 1]
+  const order = prev?.order ? (prev.order % orderCycle(rows.map((r) => r.order))) + 1 : prev ? undefined : 1
+  // earlier in the game: that slot's last batter, or his 代跑 who took the slot over; otherwise its next batter
+  const before = order ? [...rows.slice(0, at)].reverse().find((p) => p.order === order) : undefined
+  const after = order && !before ? rows.slice(at).find((p) => p.order === order) : undefined
+  const batter = before ? before.runner || before.batter : after?.batter ?? ''
+  const pos = before ? (before.runner ? undefined : before.pos) : after?.pos
+  // the opponent pitcher of the plate appearance before it (or after it, at the top)
+  const near = prev ?? rows[at]
+  const opp = { ...(near?.oppPitcher ? { oppPitcher: near.oppPitcher } : {}), ...(near?.oppHand ? { oppHand: near.oppHand } : {}) }
+  return { gameId, inning: inning ?? prev?.inning ?? rows[at]?.inning ?? 1, order, batter, ...(pos ? { pos } : {}), pitches: [], result: '', sb: 0, cs: 0, advOnError: 0, outOnBase: 0, run: 0, rbi: 0, ...opp }
+}
+/**
+ * A plate appearance was inserted (delta 1) or deleted (delta -1) at `from`: the rows after it move one slot along the
+ * order — the 棒次 and who holds that slot then (the name last seen in it before; ours by 打者, theirs by 對方打者 when
+ * kept). Rows with no 棒次 (a 突破僵局 runner, 未完成打席 / 未面對打者) are left as they are.
+ */
+export function shiftOrders<T extends BattingPA | PitchingPA>(rows: T[], from: number, delta: 1 | -1): T[] {
+  const ours = (r: T): r is T & BattingPA => 'batter' in r
+  const slotOf = (r: T) => (ours(r) ? r.order : (r as PitchingPA).oppOrder)
+  const nameOf = (r: T) => (ours(r) ? r.batter : (r as PitchingPA).oppBatter)
+  const holder = new Map<number, string | undefined>()
+  // (the game's own lineup size: a 友誼賽 order of 8 turns over after the 8th)
+  const n = orderCycle(rows.map(slotOf))
+  rows.slice(0, from).forEach((r) => { const k = slotOf(r); if (k && !isPlaced(r) && !isNoBatter(r)) holder.set(k, ours(r) ? r.runner || r.batter : nameOf(r)) })
+  return rows.map((r, i) => {
+    const k = slotOf(r)
+    if (i < from || !k || isPlaced(r) || isNoBatter(r)) return r
+    const next = ((k - 1 + delta + n) % n) + 1
+    const name = holder.has(next) ? holder.get(next) : nameOf(r)
+    const moved = ours(r) ? { ...r, order: next, ...(name ? { batter: name } : {}) } : { ...r, oppOrder: next, ...(name ? { oppBatter: name } : {}) }
+    holder.set(next, ours(r) ? (moved as BattingPA).runner || (moved as BattingPA).batter : nameOf(moved as T))
+    return moved as T
+  })
+}
+/** A blank opponent row to insert at index `at`: inning (or `inning`, as above) and pitcher of the row before it, next
+ *  batter in their order. */
+export function blankPitchingAt(rows: PitchingPA[], at: number, gameId: string, inning?: number): PitchingPA {
+  const prev = rows[at - 1]
+  const near = prev ?? rows[at]
+  const oppOrder = prev?.oppOrder ? (prev.oppOrder % orderCycle(rows.map((r) => r.oppOrder))) + 1 : prev ? undefined : 1
+  // that slot's batter the last time it came up (the names are only there when the recorder kept them)
+  const oppBatter = oppOrder ? [...rows.slice(0, at)].reverse().find((p) => p.oppOrder === oppOrder)?.oppBatter : undefined
+  // (that slot's 左打／右打 this game comes along)
+  const oppBats = oppOrder ? [...rows.slice(0, at)].reverse().find((p) => p.oppOrder === oppOrder)?.oppBats : undefined
+  return { gameId, inning: inning ?? near?.inning ?? 1, oppOrder, pitcher: near?.pitcher ?? '', ...(oppBatter ? { oppBatter } : {}), ...(oppBats ? { oppBats } : {}), pitches: [], result: '', sba: 0, cs: 0, wp: 0, pb: 0, pk: 0 }
+}
+
+const oppKeyOf = (p: BattingPA) => `${p.oppPitcher ?? ''}\u0000${p.oppHand ?? ''}`
+/** The opponent pitcher's stint row `index` is in: the rows of that game around it with the same pitcher (name and
+ *  hand), [first, last]. A row of a stint that is not its first can be fixed for the whole stint or start a new one. */
+export function oppStintOf(rows: BattingPA[], index: number): [number, number] {
+  const at = rows[index]
+  if (!at) return [index, index]
+  const was = oppKeyOf(at)
+  const same = (j: number) => rows[j] && rows[j].gameId === at.gameId && oppKeyOf(rows[j]) === was
+  let a = index, z = index
+  while (same(a - 1)) a--
+  while (same(z + 1)) z++
+  return [a, z]
+}
+
+/**
+ * 修改資料: the opponent pitcher of our plate appearances. `stint` (整段都改: same man, his name or hand was written down
+ * wrong) changes every row of the stint row `index` is in; `from` (從這個打席起換投) changes row `index` and the rows
+ * after it that had the same pitcher, until the next change — so fixing the first plate appearance of a stint fixes the
+ * whole stint either way, a hand-only fix too. Blank keys are dropped.
+ */
+export function applyOppPitcher(rows: BattingPA[], index: number, next: { oppPitcher?: string; oppHand?: OppHand }, mode: 'stint' | 'from' = 'from'): BattingPA[] {
+  if (!rows[index]) return rows
+  const [first, last] = oppStintOf(rows, index)
+  const name = next.oppPitcher?.trim()
+  const out = rows.slice()
+  for (let j = mode === 'stint' ? first : index; j <= last; j++) {
+    const { oppPitcher: _n, oppHand: _h, ...rest } = rows[j]
+    void _n; void _h
+    out[j] = { ...rest, ...(name ? { oppPitcher: name } : {}), ...(next.oppHand ? { oppHand: next.oppHand } : {}) }
+  }
+  return out
+}
+
+/**
+ * 修改資料: the opponent batter on row `index` and his other plate appearances this game — the same slot of their
+ * order, the same batter (a 對方代打 in that slot is someone else). Indices of plate-appearance rows, in order.
+ */
+export function oppSlotRowsOf(rows: PitchingPA[], index: number): number[] {
+  const at = rows[index]
+  if (!at || !isPA(at)) return at ? [index] : []
+  const key = oppKey(at)
+  return rows.flatMap((p, j) => (p.gameId === at.gameId && isPA(p) && p.oppOrder === at.oppOrder && oppKey(p) === key ? [j] : []))
+}
+/**
+ * 修改資料: 左打 / 右打 / 不知道 (undefined: the key is left out) of the opponent batter on row `index`; `slot` (整段（同一棒
+ * 這場）都改) changes every plate appearance of his this game (oppSlotRowsOf), `one` only this one (a switch hitter).
+ */
+export function applyOppBats(rows: PitchingPA[], index: number, bats: OppBats | undefined, mode: 'one' | 'slot' = 'one'): PitchingPA[] {
+  if (!rows[index]) return rows
+  const which = new Set(mode === 'slot' ? oppSlotRowsOf(rows, index) : [index])
+  return rows.map((p, j) => {
+    if (!which.has(j)) return p
+    const { oppBats: _b, ...rest } = p
+    void _b
+    return bats ? { ...rest, oppBats: bats } : rest
+  })
+}
+
+/* ------------------------------------------------ base running of our batter after he reached */
+const ON_FIRST = new Set(['一安', '內安', '保送', '故四', '觸身', '失誤', '野選', '妨礙'])
+/** Base the batter reached on his result: 1–3, 4 for a home run, null when he was out at the plate. */
+export function startBase(pa: Pick<BattingPA, 'result' | 'code'>): number | null {
+  if (isDouble(pa.result)) return 2
+  if (pa.result === '三安') return 3
+  if (pa.result === '全壘打') return 4
+  if (ON_FIRST.has(pa.result)) return 1
+  // 不死三振: struck out but reached (no out code)
+  if (pa.result === '三振' && pa.code && !OUT_CODES.has(pa.code)) return 1
+  return null
+}
+
+export type RunEvent = 'sb' | 'err' | 'cs' | 'pk' | 'out' | 'score' | 'stranded'
+export const RUN_EVENTS: Array<{ ev: RunEvent; label: string; out?: boolean }> = [
+  { ev: 'sb', label: '盜壘' }, { ev: 'err', label: '失誤進壘' }, { ev: 'score', label: '得分' }, { ev: 'stranded', label: '殘壘' },
+  { ev: 'cs', label: '盜壘失敗', out: true }, { ev: 'pk', label: '牽制出局', out: true }, { ev: 'out', label: '壘死', out: true },
+]
+export interface PathStep { label: string; base?: number; end?: 'run' | 'out' | 'stranded' }
+
+/** How the runner got around, rebuilt from the row's counts: errors and steals in order, then how it ended. */
+export function basePath(pa: BattingPA): PathStep[] {
+  const start = startBase(pa)
+  if (start === null) return []
+  const steps: PathStep[] = [{ label: pa.result, base: Math.min(start, 4) }]
+  if (start === 4) return [{ label: pa.result, end: 'run' }]
+  let base = start
+  // from third the next base is home (盜本壘 / 失誤回本壘): shown without a base, the run itself is the ending
+  const move = (label: string, n: number) => { for (let i = 0; i < n; i++) { if (base >= 3) { steps.push({ label: `${label}（本壘）` }); continue } base += 1; steps.push({ label, base }) } }
+  move('失誤進壘', pa.advOnError)
+  move('盜壘', pa.sb)
+  if (pa.run) steps.push({ label: '得分', end: 'run' })
+  else if (pa.cs) steps.push({ label: '盜壘失敗', end: 'out' })
+  else if (pa.outOnBase) steps.push({ label: pa.baserunningOuts ? '壘死' : '出局', end: 'out' })
+  else if (pa.code === 'L') steps.push({ label: '殘壘', end: 'stranded' })
+  return steps
+}
+/** Still on base as far as the row says (reached, and neither scored, was put out nor left on base). */
+export const stillOn = (pa: BattingPA) => { const p = basePath(pa); return p.length > 0 && !p[p.length - 1].end }
+
+/** One base-running event on this row, the way 紀錄比賽 records it. Steals and error advances add up; an ending
+ *  (得分, 殘壘, or an out on the bases) replaces whatever ending the row had. An out needs its out code picked by hand
+ *  (which out of the inning it was is not known here); a run is R, left on base is L. */
+export function applyRunEvent(pa: BattingPA, ev: RunEvent): BattingPA {
+  const next = { ...pa }
+  if (ev === 'sb') { next.sb += 1; return next }
+  if (ev === 'err') { next.advOnError += 1; return next }
+  // a new ending: clear the old one first
+  next.run = 0; next.cs = 0; next.outOnBase = 0; delete next.baserunningOuts
+  if (next.code === 'R' || next.code === 'L') delete next.code
+  switch (ev) {
+    case 'cs': next.cs = 1; break
+    case 'pk': next.outOnBase = 1; break
+    case 'out': next.outOnBase = 1; next.baserunningOuts = 1; break
+    case 'score': return withRun(next, 1)
+    case 'stranded': next.code = 'L'; break
+  }
+  return next
+}
+/** Which ending the row has now (for showing that button as selected). */
+export function runEnding(pa: BattingPA): RunEvent | null {
+  if (pa.run) return 'score'
+  if (pa.cs) return 'cs'
+  if (pa.outOnBase) return 'out'
+  if (pa.code === 'L') return 'stranded'
+  return null
+}
+/** Take back the last step of basePath (the ending first, then the latest steal, then the latest error advance). */
+export function undoRunStep(pa: BattingPA): BattingPA {
+  const next = { ...pa }
+  if (next.run) return withRun(next, 0)
+  if (next.cs) { next.cs -= 1; return next }
+  if (next.outOnBase) { next.outOnBase -= 1; delete next.baserunningOuts; return next }
+  if (next.code === 'L') { delete next.code; return next }
+  if (next.sb) { next.sb -= 1; return next }
+  if (next.advOnError) next.advOnError -= 1
+  return next
+}
