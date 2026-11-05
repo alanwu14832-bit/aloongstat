@@ -5,6 +5,7 @@ import { useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { NAV_GROUPS } from './nav'
 import { TeamLogo } from '../ui/TeamLogo'
+import { CrackTexture } from '../ui/BrandArt'
 import { useUiStore } from '../../store/ui'
 import { useDataStore } from '../../store/data'
 import { SidebarAccount } from './SidebarAccount'
@@ -140,12 +141,13 @@ export function Sidebar() {
       className="brand-panel hidden lg:flex print:hidden flex-col sticky top-0 h-screen shrink-0 z-40"
       style={{ width }}
     >
-      <Brand collapsed={collapsed} reduced={reduced} />
-      <nav aria-label="主選單" className="flex-1 overflow-visible pt-2 pb-4">
+      <CrackTexture opacity={0.08} fade="bottom" size="700px auto" position="left bottom" />
+      <div className="relative"><Brand collapsed={collapsed} reduced={reduced} /></div>
+      <nav aria-label="主選單" className="relative flex-1 overflow-visible pt-2 pb-4">
         <NavList collapsed={collapsed} reduced={reduced} />
       </nav>
-      <SidebarAccount collapsed={collapsed} reduced={reduced} />
-      <div className="px-3 py-3 border-t border-border">
+      <div className="relative"><SidebarAccount collapsed={collapsed} reduced={reduced} /></div>
+      <div className="relative px-3 py-3 border-t border-border">
         <button
           type="button"
           onClick={toggle}

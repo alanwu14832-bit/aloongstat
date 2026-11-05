@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Check } from 'lucide-react'
-import { TEAM, teamAsset } from '../../config/team'
+import { TEAM } from '../../config/team'
 import { ARCHIVE } from '../../config/archive'
 import { useDataStore } from '../../store/data'
 import { cx } from '../../lib/format'
 import type { Game } from '../../data/types'
 import { Reveal } from '../motion/Reveal'
+import { CrackTexture, YellowPanel } from './BrandArt'
 
 const WEEK = ['日', '一', '二', '三', '四', '五', '六']
 const dayText = (iso: string) => { const d = new Date(`${iso}T00:00:00`); return `${d.getMonth() + 1}/${d.getDate()}（${WEEK[d.getDay()]}）` }
@@ -25,26 +26,24 @@ export function WelcomeBoard({ next }: { next?: Game }) {
     { title: '紀錄第一場比賽', text: '「紀錄比賽」逐球輸入，送出就自動算好數據；比賽中這裡和「即時比分」同步更新。', to: '/record', action: '開始紀錄', done: false },
   ]
   return (
-    <section aria-label={`歡迎來到 ${TEAM.short} 數據平台`} className="brand-board relative overflow-hidden rounded-[var(--radius)]">
-      <img src={teamAsset(TEAM.logo)} alt="" aria-hidden className="pointer-events-none select-none absolute -right-10 -bottom-14 w-[260px] md:w-[380px] opacity-[0.10]" />
-      <div className="relative p-6 md:p-9 flex flex-col gap-7">
-        <Reveal className="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-7">
-          <img src={teamAsset(TEAM.logo)} alt={TEAM.org} className="w-[112px] md:w-[140px] h-auto shrink-0 drop-shadow-[0_10px_24px_rgba(0,0,0,0.35)]" />
-          <div className="min-w-0">
-            <div className="text-[12px] text-accent font-semibold tracking-[0.12em]">WELCOME</div>
-            <h2 className="mt-1 text-[26px] md:text-[34px] leading-tight text-ink">歡迎來到{TEAM.short}數據平台</h2>
-            <p className="mt-2 text-[14px] md:text-[15px] text-ink-2 leading-relaxed max-w-[56ch]">
-              逐球紀錄每一場比賽，送出就自動算好打擊、投球、守備數據；比賽進行中，隊友和球迷都能在「即時比分」看到每一球。
+    <section aria-label={`歡迎來到 ${TEAM.short} 數據平台`} className="brand-board relative overflow-hidden rounded-[var(--radius)] grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <YellowPanel className="h-[220px] sm:h-[260px] lg:h-auto lg:order-last" />
+      <div className="relative p-6 md:p-9 flex flex-col gap-7 min-w-0">
+        <CrackTexture opacity={0.10} fade="top-right" />
+        <Reveal className="relative min-w-0">
+          <div className="text-[12px] text-accent font-semibold tracking-[0.12em]">WELCOME</div>
+          <h2 className="mt-1 text-[26px] md:text-[34px] leading-tight text-ink">歡迎來到{TEAM.short}數據平台</h2>
+          <p className="mt-2 text-[14px] md:text-[15px] text-ink-2 leading-relaxed max-w-[56ch]">
+            逐球紀錄每一場比賽，送出就自動算好打擊、投球、守備數據；比賽進行中，隊友和球迷都能在「即時比分」看到每一球。
+          </p>
+          {next && (
+            <p className="mt-3 text-[14px] text-ink">
+              下一場 <span className="figure text-[18px] font-bold text-accent">{dayText(next.date)}{next.time ? ` ${next.time}` : ''}</span> vs <span className="font-bold">{next.opponent}</span>
             </p>
-            {next && (
-              <p className="mt-3 text-[14px] text-ink">
-                下一場 <span className="figure text-[18px] font-bold text-accent">{dayText(next.date)}{next.time ? ` ${next.time}` : ''}</span> vs <span className="font-bold">{next.opponent}</span>
-              </p>
-            )}
-          </div>
+          )}
         </Reveal>
         {!ARCHIVE && (
-          <ol className="grid grid-cols-1 md:grid-cols-3 border-t border-border">
+          <ol className="relative grid grid-cols-1 md:grid-cols-3 border-t border-border">
             {steps.map((s, i) => (
               <li key={s.title} className={cx('py-4 md:pt-5 md:pb-0 md:pr-6 border-b border-border last:border-b-0 md:border-b-0', i > 0 && 'md:pl-6 md:border-l')}>
                 <Reveal delay={0.12 + 0.08 * i}>

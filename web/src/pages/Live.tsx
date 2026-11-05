@@ -27,7 +27,8 @@ import { HIT_BASE_COUNT, OPP_BATS_LABEL, oppBatterName, type Game } from '../dat
 import { cx } from '../lib/format'
 import { NON_AB_RESULTS, resultText, summarizeGame, type GameSummary } from '../data/stats'
 import { f3 } from '../lib/fmt'
-import { TEAM, teamAsset } from '../config/team'
+import { TEAM } from '../config/team'
+import { CrackTexture, YellowPanel } from '../components/ui/BrandArt'
 import { gridCell, type GridTone } from '../data/gameText'
 import { dueUp, halfPlayed, oppFrom, ourFrom, onDeckOf, type UpBatter } from '../record/upNext'
 import { currentHalfCard, halfCardKey, liveContext, seasonLine, type HalfCard } from '../data/liveFacts'
@@ -80,8 +81,10 @@ const pill = 'press inline-flex items-center h-9 px-4 rounded-full text-[13px] f
 /** Nothing on: the navy board says so, then what is next (or how the last one ended) in big gold figures. */
 function IdleBoard({ error, next, last }: { error: string | null; next?: Game; last?: GameSummary }) {
   return (
-    <section aria-label="目前沒有進行中的比賽" className="brand-board relative overflow-hidden rounded-[var(--radius)] p-6 md:p-8">
-      <img src={teamAsset(TEAM.logo)} alt="" aria-hidden className="pointer-events-none select-none absolute -right-8 -bottom-12 w-[240px] md:w-[320px] opacity-[0.10]" />
+    <section aria-label="目前沒有進行中的比賽" className="brand-board relative overflow-hidden rounded-[var(--radius)] grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px]">
+      <YellowPanel className="h-[200px] md:h-auto md:order-last" />
+      <div className="relative p-6 md:p-8 min-w-0">
+      <CrackTexture opacity={0.10} fade="top-right" />
       <Reveal className="relative flex flex-col gap-5 max-w-xl">
         <div className="flex items-center gap-2 text-[12px] text-muted tracking-[0.08em]"><span className="size-2 rounded-full bg-[var(--border-strong)]" />目前沒有進行中的比賽</div>
         {error && <p className="text-[13px] text-critical">{error}</p>}
@@ -109,6 +112,7 @@ function IdleBoard({ error, next, last }: { error: string | null; next?: Game; l
           {last && <Link to={`/games?game=${encodeURIComponent(last.game.id)}`} className={cx(pill, next ? 'bg-surface-2 text-ink hover:bg-surface-3' : 'bg-accent text-accent-ink hover:brightness-105')}>看最近一場</Link>}
         </div>
       </Reveal>
+      </div>
     </section>
   )
 }
