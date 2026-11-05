@@ -113,13 +113,13 @@
   }
   .text-display {
     font-family: var(--font-display);
-    font-size: 30px;
-    line-height: 1.12;
+    font-size: 26px;
+    line-height: 1.15;
     font-weight: 800;
     letter-spacing: var(--tracking-display);
   }
   @media (min-width: 768px) {
-    .text-display { font-size: 40px; }
+    .text-display { font-size: 32px; }
   }
   /* Figures (stat tiles, scoreboards, the hero record) speak in the athletic condensed face. */
   .figure {

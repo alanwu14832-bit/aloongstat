@@ -2,7 +2,6 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Card } from '../components/ui/Card'
-import { EmptyState } from '../components/ui/EmptyState'
 import { Diamond } from '../record/Diamond'
 import { AnimatePresence, motion } from 'framer-motion'
 import { BOARD, CountLights, LineScoreBoard, type BoardTeam } from '../components/ui/Scoreboard'
@@ -24,11 +23,11 @@ import { useLiveGames } from '../hooks/useLiveGames'
 import { useDataStore } from '../store/data'
 import { TEAM_NAME } from '../data/seed'
 import { withSideNames } from '../data/intrasquad'
-import { HIT_BASE_COUNT, OPP_BATS_LABEL, oppBatterName } from '../data/types'
+import { HIT_BASE_COUNT, OPP_BATS_LABEL, oppBatterName, type Game } from '../data/types'
 import { cx } from '../lib/format'
-import { NON_AB_RESULTS } from '../data/stats'
+import { NON_AB_RESULTS, resultText, summarizeGame, type GameSummary } from '../data/stats'
 import { f3 } from '../lib/fmt'
-import { TEAM } from '../config/team'
+import { TEAM, teamAsset } from '../config/team'
 import { gridCell, type GridTone } from '../data/gameText'
 import { dueUp, halfPlayed, oppFrom, ourFrom, onDeckOf, type UpBatter } from '../record/upNext'
 import { currentHalfCard, halfCardKey, liveContext, seasonLine, type HalfCard } from '../data/liveFacts'
@@ -66,15 +65,52 @@ export function LivePage() {
     return (
       <>
         <PageHeader title="即時比分" description="紀錄員在「紀錄比賽」逐球輸入時，這一頁會每 5 秒自動更新，不需登入。" />
-        <Card>
-          <EmptyState title="目前沒有進行中的比賽" description={error ?? (nextGame ? `下一場：${nextGame.date}${nextGame.time ? ` ${nextGame.time}` : ''} vs ${nextGame.opponent}${nextGame.venue ? `・${nextGame.venue}` : ''}` : lastFinal ? `最近一場：${lastFinal.date} vs ${lastFinal.opponent}，到「比賽」頁查看完整成績。` : undefined)}
-            action={<span className="inline-flex gap-4 text-[13px]">{nextGame && <Link to="/games?view=schedule" className="underline underline-offset-2 text-ink">看賽程</Link>}{lastFinal && <Link to={`/games?game=${encodeURIComponent(lastFinal.id)}`} className="underline underline-offset-2 text-ink">看最近一場</Link>}</span>} />
-        </Card>
+        <IdleBoard error={error} next={nextGame} last={lastFinal ? summarizeGame(base, lastFinal) : undefined} />
       </>
     )
   }
 
   return <LiveBoard live={live} error={error} />
+}
+
+const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六']
+const dayText = (iso: string) => { const d = new Date(`${iso}T00:00:00`); return `${d.getMonth() + 1}/${d.getDate()}（${WEEKDAY[d.getDay()]}）` }
+const pill = 'press inline-flex items-center h-9 px-4 rounded-full text-[13px] font-medium transition-colors'
+
+/** Nothing on: the navy board says so, then what is next (or how the last one ended) in big gold figures. */
+function IdleBoard({ error, next, last }: { error: string | null; next?: Game; last?: GameSummary }) {
+  return (
+    <section aria-label="目前沒有進行中的比賽" className="brand-board relative overflow-hidden rounded-[var(--radius)] p-6 md:p-8">
+      <img src={teamAsset(TEAM.logo)} alt="" aria-hidden className="pointer-events-none select-none absolute -right-8 -bottom-12 w-[240px] md:w-[320px] opacity-[0.10]" />
+      <div className="relative flex flex-col gap-5 max-w-xl">
+        <div className="flex items-center gap-2 text-[12px] text-muted tracking-[0.08em]"><span className="size-2 rounded-full bg-[var(--border-strong)]" />目前沒有進行中的比賽</div>
+        {error && <p className="text-[13px] text-critical">{error}</p>}
+        {next ? (
+          <div>
+            <div className="text-[12px] text-muted">下一場</div>
+            <div className="figure text-[44px] md:text-[60px] font-bold leading-none text-accent mt-1">{dayText(next.date)}{next.time ? <span className="text-ink ml-3">{next.time}</span> : null}</div>
+            <div className="mt-2 text-[18px] md:text-[20px] font-bold text-ink">vs {next.opponent}</div>
+            <div className="text-[13px] text-ink-2 mt-0.5">{[next.tournament, next.venue].filter(Boolean).join('・')}</div>
+          </div>
+        ) : last ? (
+          <div>
+            <div className="text-[12px] text-muted">最近一場・{dayText(last.game.date)} vs {last.game.opponent}</div>
+            <div className="flex items-end gap-4 mt-1">
+              <div className="figure text-[56px] md:text-[72px] font-bold leading-none text-accent tnum">{last.runsUs}<span className="text-ink-2 mx-2">:</span>{last.runsOpp}</div>
+              <div className="pb-2 text-[16px] font-bold text-ink">{resultText(last.result)}</div>
+            </div>
+            <div className="text-[13px] text-ink-2 mt-1">{[last.game.tournament, last.game.venue].filter(Boolean).join('・')}</div>
+          </div>
+        ) : (
+          <p className="text-[15px] text-ink-2">比賽開始後，這裡會即時顯示比分、壘包和每一球。</p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {next && <Link to="/games?view=schedule" className={cx(pill, 'bg-accent text-accent-ink hover:brightness-105')}>看賽程</Link>}
+          {last && <Link to={`/games?game=${encodeURIComponent(last.game.id)}`} className={cx(pill, next ? 'bg-surface-2 text-ink hover:bg-surface-3' : 'bg-accent text-accent-ink hover:brightness-105')}>看最近一場</Link>}
+        </div>
+      </div>
+    </section>
+  )
 }
 
 // the board is always dark: the team colour is lifted toward the board's ink so a navy or a dark amber still glows

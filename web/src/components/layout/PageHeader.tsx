@@ -15,11 +15,11 @@ export interface PageHeaderProps {
 /** Page title row: title + one-line context on the left, page-level controls on the right. */
 export function PageHeader({ title, description, actions, scoped }: PageHeaderProps) {
   const head = (
-    <div className="flex items-end justify-between gap-x-6 gap-y-3 flex-wrap pt-2 pb-1">
+    <div className="flex items-end justify-between gap-x-6 gap-y-3 flex-wrap">
       <div className="min-w-0">
-        <span aria-hidden className="block text-ink draw-x motion-reduce:animate-none mb-3" key={`${title}-accent`}><Stitches width={48} /></span>
+        <span aria-hidden className="block text-accent mb-2" key={`${title}-accent`}><Stitches width={40} /></span>
         <h1 className="text-display text-ink">{title}</h1>
-        {description && <p className="text-[15px] text-muted mt-2.5 prose-max leading-relaxed">{description}</p>}
+        {description && <p className="text-[14px] text-muted mt-1.5 prose-max leading-relaxed">{description}</p>}
       </div>
       {/* max-w-full: on a phone a wide action row wraps inside the page instead of pushing it sideways */}
       {actions && <div className="flex items-center gap-2 shrink-0 max-w-full">{actions}</div>}
