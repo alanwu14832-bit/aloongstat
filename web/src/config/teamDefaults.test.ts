@@ -35,7 +35,7 @@ describe('team config', () => {
     expect(resolveTeam({ VITE_TEAM_SEASON_START: '8.5' }).seasonStart).toBe(1)
   })
   it('reads the link-preview settings (site address, picture, description)', () => {
-    expect(resolveTeam({}).siteUrl).toBe('')
+    expect(resolveTeam({}).siteUrl).toBe('https://aloongstat.mbaw.workers.dev')
     expect(resolveTeam({ VITE_TEAM_SITE_URL: 'https://x.org/' }).siteUrl).toBe('https://x.org')
     expect(resolveTeam({ VITE_TEAM_SITE_URL: 'javascript:alert(1)' }).siteUrl).toBe(TEAM_DEFAULTS.siteUrl)
     expect(resolveTeam({ VITE_TEAM_SITE_URL: 'x.org' }).siteUrl).toBe(TEAM_DEFAULTS.siteUrl)
