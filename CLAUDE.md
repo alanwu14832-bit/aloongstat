@@ -15,9 +15,9 @@ settings). Setup and operations are in docs/SETUP.md and docs/HANDOVER.md; keep 
   were weighed on 2026-11-05 and turned down: Appwrite means rewriting the data layer and pauses on console inactivity,
   Neon has no realtime and its auth may not do anonymous sign-in). `.github/workflows/keepalive.yml` stops it pausing;
   `backup.yml` is the only backup.
-- Visibility: **scores public, stats behind login** — schedule, live score and game results open to anyone; batting /
-  pitching / fielding rows, player pages, scouting only for the team's accounts. Not built yet: today everything is
-  public read like the source site.
+- Visibility (built 2026-11-05, batch 1): 一般人 → 球員 → 紀錄員 → 管理者 (see the security rule below). Batch 2: data
+  that must stay inside the team (players' height / weight / school, later pitch type and location, scouting) in tables
+  only `is_member()` reads.
 - First features planned: login-only stats, per-pitch type + location (+ optional velocity), rule presets per
   competition (甲組春季聯賽, 爆米花聯盟, 熱身賽), opponent scouting reports. The team's logo (given by the maintainer
   2026-11-05) is `web/public/logo.png` (outer background made transparent) and `mark.png` (the mascot's head, for small
@@ -53,7 +53,14 @@ settings). Setup and operations are in docs/SETUP.md and docs/HANDOVER.md; keep 
   `user_id = auth.uid()`; binding is by 邀請碼, email code or the admin — see `supabase/migrations/2026-10-08_security.sql`
   and docs/SECURITY.md), or for a live 快速登入 session (anonymous sign-in + the shared password checked in the database,
   `quick_sessions`; `supabase/migrations/2026-10-10_quick_login.sql`). `is_editor()` = either; the 紀錄員名單,
-  `audit_log` and the quick password itself stay with `is_bound_editor()`. Never check that password in the site. Never write an email into a public table (`updated_by`/`created_by` are stamped by a trigger),
+  `audit_log` and the quick password itself stay with `is_bound_editor()`. Never check that password in the site.
+  身分分層 (`supabase/migrations/2026-11-05_roles.sql`): `editors.role` is player / recorder / admin; `is_bound_editor()`
+  counts recorders and admins only (so players never write), the account list and `add_member` / `set_member_role` /
+  `reset_editor` need `is_admin()`, `my_role()` tells the site. The site gates pages by level (`hooks/useAccess.ts`,
+  `components/layout/Gate.tsx`, `level` on the menu items): 0 一般人 (即時比分, 比賽, 紀錄簿, 使用指南, 數據字典, a short
+  總覽), 1 球員, 2 紀錄員, 3 管理者 (帳號管理 at /accounts, 網站版本). That gate is only what the site shows: the
+  plate-appearance rows stay publicly readable because 比賽 and 紀錄簿 are built from them; data that must stay inside
+  the team goes into tables only `is_member()` can read. 快速登入 is no longer offered in the sign-in form. Never write an email into a public table (`updated_by`/`created_by` are stamped by a trigger),
   and keep the Content-Security-Policy (`web/src/config/security.ts`) and `web/public/_headers` when adding features.
 - Hosting is Cloudflare Workers static assets (`web/wrangler.jsonc`, root directory `web`, deploy command
   `npx wrangler deploy`; a paid client project, so Vercel Hobby is not allowed). SPA routing comes from
