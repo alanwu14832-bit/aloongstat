@@ -56,7 +56,7 @@ export const TEAM_DEFAULTS = {
   /** VITE_TEAM_SITE_URL: the site's full address (http(s), no trailing /; include the path when the site lives under
    *  one, e.g. https://x.github.io/bafinstat), so link previews (LINE, Facebook…) get an absolute picture URL. A build
    *  whose base path differs from it keeps a relative picture. Set it after moving to your own domain. */
-  siteUrl: '',
+  siteUrl: 'https://aloongstat.mbaw.workers.dev',
   /** VITE_TEAM_OG_IMAGE: the 1200×630 link-preview picture: a file in web/public or a full URL. Without the file the
    *  build uses the logo and a small preview card. */
   ogImage: 'og.png',

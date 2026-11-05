@@ -59,7 +59,7 @@ Cloudflare 現在建立網站預設是 Workers（以前叫 Pages），兩者都�
    - `VITE_TEAM_OG_IMAGE`：預覽圖（1200×630），預設 `web/public/og.png`。
    - `VITE_TEAM_DESCRIPTION`：預覽下面的一句介紹；不填就自動寫「臺中台壽霸龍成棒隊（台壽霸龍）的比賽紀錄、即時比分與球員數據…」。
 
-5. **Deploy**（之後改設定要到 **Deployments** 按 **Retry build**）。約兩分鐘後得到網址 `https://aloongstat.<你的帳號>.workers.dev`。
+5. **Deploy**（之後改設定要到 **Deployments** 按 **Retry build**）。約兩分鐘後得到網址 `https://aloongstat.<你的帳號>.workers.dev`（目前是 `https://aloongstat.mbaw.workers.dev`）。
 
 > 有收費就是商業用途，Vercel 免費方案不能用；Cloudflare 免費方案沒有這個限制。
 

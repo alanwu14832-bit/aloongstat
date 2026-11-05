@@ -8,8 +8,12 @@ plainly, and say exactly what to click when something needs doing outside the co
 settings). Setup and operations are in docs/SETUP.md and docs/HANDOVER.md; keep those in step with what you change.
 
 ## Decisions so far (2026-11-02)
-- Repo `alanwu14832-bit/aloongstat`, private. Hosting Cloudflare Workers (a paid client: Vercel Hobby is not allowed).
-- Supabase free plan for now (`.github/workflows/keepalive.yml` stops it pausing; `backup.yml` is the only backup).
+- Repo `alanwu14832-bit/aloongstat`, private. Hosting Cloudflare Workers (a paid client: Vercel Hobby is not allowed),
+  live at https://aloongstat.mbaw.workers.dev (`siteUrl` in teamDefaults.ts).
+- Supabase free plan for now, in its own account (the maintainer's account had no free project left; Appwrite and Neon
+  were weighed on 2026-11-05 and turned down: Appwrite means rewriting the data layer and pauses on console inactivity,
+  Neon has no realtime and its auth may not do anonymous sign-in). `.github/workflows/keepalive.yml` stops it pausing;
+  `backup.yml` is the only backup.
 - Visibility: **scores public, stats behind login** — schedule, live score and game results open to anyone; batting /
   pitching / fielding rows, player pages, scouting only for the team's accounts. Not built yet: today everything is
   public read like the source site.
