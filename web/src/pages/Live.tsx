@@ -15,7 +15,7 @@ import { liveBoxScore } from '../data/boxScore'
 import { Maximize2, Minimize2 } from 'lucide-react'
 import { useMediaQuery, usePrefersReducedMotion } from '../hooks/useMediaQuery'
 import { RollingNumber } from '../components/motion/RollingNumber'
-import { EASE } from '../components/motion/Reveal'
+import { EASE, Reveal } from '../components/motion/Reveal'
 import { count, liveSplit, offense, oppBatterOf, oppPitchCount, score, type RecordState } from '../record/model'
 import { oppPitcherText } from '../record/OppParts'
 import { hhmm } from '../lib/dates'
@@ -82,7 +82,7 @@ function IdleBoard({ error, next, last }: { error: string | null; next?: Game; l
   return (
     <section aria-label="目前沒有進行中的比賽" className="brand-board relative overflow-hidden rounded-[var(--radius)] p-6 md:p-8">
       <img src={teamAsset(TEAM.logo)} alt="" aria-hidden className="pointer-events-none select-none absolute -right-8 -bottom-12 w-[240px] md:w-[320px] opacity-[0.10]" />
-      <div className="relative flex flex-col gap-5 max-w-xl">
+      <Reveal className="relative flex flex-col gap-5 max-w-xl">
         <div className="flex items-center gap-2 text-[12px] text-muted tracking-[0.08em]"><span className="size-2 rounded-full bg-[var(--border-strong)]" />目前沒有進行中的比賽</div>
         {error && <p className="text-[13px] text-critical">{error}</p>}
         {next ? (
@@ -108,7 +108,7 @@ function IdleBoard({ error, next, last }: { error: string | null; next?: Game; l
           {next && <Link to="/games?view=schedule" className={cx(pill, 'bg-accent text-accent-ink hover:brightness-105')}>看賽程</Link>}
           {last && <Link to={`/games?game=${encodeURIComponent(last.game.id)}`} className={cx(pill, next ? 'bg-surface-2 text-ink hover:bg-surface-3' : 'bg-accent text-accent-ink hover:brightness-105')}>看最近一場</Link>}
         </div>
-      </div>
+      </Reveal>
     </section>
   )
 }

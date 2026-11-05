@@ -5,6 +5,7 @@ import { ARCHIVE } from '../../config/archive'
 import { useDataStore } from '../../store/data'
 import { cx } from '../../lib/format'
 import type { Game } from '../../data/types'
+import { Reveal } from '../motion/Reveal'
 
 const WEEK = ['日', '一', '二', '三', '四', '五', '六']
 const dayText = (iso: string) => { const d = new Date(`${iso}T00:00:00`); return `${d.getMonth() + 1}/${d.getDate()}（${WEEK[d.getDay()]}）` }
@@ -27,7 +28,7 @@ export function WelcomeBoard({ next }: { next?: Game }) {
     <section aria-label={`歡迎來到 ${TEAM.short} 數據平台`} className="brand-board relative overflow-hidden rounded-[var(--radius)]">
       <img src={teamAsset(TEAM.logo)} alt="" aria-hidden className="pointer-events-none select-none absolute -right-10 -bottom-14 w-[260px] md:w-[380px] opacity-[0.10]" />
       <div className="relative p-6 md:p-9 flex flex-col gap-7">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-7">
+        <Reveal className="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-7">
           <img src={teamAsset(TEAM.logo)} alt={TEAM.org} className="w-[112px] md:w-[140px] h-auto shrink-0 drop-shadow-[0_10px_24px_rgba(0,0,0,0.35)]" />
           <div className="min-w-0">
             <div className="text-[12px] text-accent font-semibold tracking-[0.12em]">WELCOME</div>
@@ -41,11 +42,12 @@ export function WelcomeBoard({ next }: { next?: Game }) {
               </p>
             )}
           </div>
-        </div>
+        </Reveal>
         {!ARCHIVE && (
           <ol className="grid grid-cols-1 md:grid-cols-3 border-t border-border">
             {steps.map((s, i) => (
               <li key={s.title} className={cx('py-4 md:pt-5 md:pb-0 md:pr-6 border-b border-border last:border-b-0 md:border-b-0', i > 0 && 'md:pl-6 md:border-l')}>
+                <Reveal delay={0.12 + 0.08 * i}>
                 <div className="flex items-center gap-2.5">
                   <span className={cx('inline-flex items-center justify-center size-7 rounded-full figure text-[14px] font-bold shrink-0', s.done ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-ink')}>
                     {s.done ? <Check className="size-4" strokeWidth={3} aria-label="已完成" /> : i + 1}
@@ -58,6 +60,7 @@ export function WelcomeBoard({ next }: { next?: Game }) {
                     {s.action}<ArrowRight className="size-3.5 transition-transform duration-[var(--dur-base)] group-hover:translate-x-0.5" />
                   </Link>
                 )}
+                </Reveal>
               </li>
             ))}
           </ol>
