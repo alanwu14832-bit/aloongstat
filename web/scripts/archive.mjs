@@ -12,7 +12,8 @@ const REPO = process.env.ARCHIVE_REPO || 'alanwu14832-bit/aloongstat'
 const TOKEN = process.env.ARCHIVE_TOKEN
 const skip =
   process.env.VITE_ARCHIVE_ID ? 'this build is itself a saved copy'
-  : process.env.GITHUB_ACTIONS ? 'GitHub Actions build (tests / GitHub Pages)'
+  // (the deploy step of auto-deploy.yml builds the live site in GitHub Actions too, and sets ARCHIVE_IN_CI)
+  : process.env.GITHUB_ACTIONS && !process.env.ARCHIVE_IN_CI ? 'GitHub Actions build (tests / GitHub Pages)'
   : process.env.SKIP_ARCHIVE ? 'SKIP_ARCHIVE is set'
   : process.platform === 'win32' ? 'Windows'
   : null
