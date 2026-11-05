@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Check } from 'lucide-react'
 import { TEAM } from '../../config/team'
@@ -7,21 +8,25 @@ import { cx } from '../../lib/format'
 import type { Game } from '../../data/types'
 import { Reveal } from '../motion/Reveal'
 import { CrackTexture, YellowPanel } from './BrandArt'
+import { AuthDialog } from './AuthDialog'
 
+const STEP_BUTTON = 'press group mt-3 inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-accent text-accent-ink text-[13px] font-semibold hover:brightness-105 transition-[filter]'
+const ARROW = 'size-3.5 transition-transform duration-[var(--dur-base)] group-hover:translate-x-0.5'
 const WEEK = ['日', '一', '二', '三', '四', '五', '六']
 const dayText = (iso: string) => { const d = new Date(`${iso}T00:00:00`); return `${d.getMonth() + 1}/${d.getDate()}（${WEEK[d.getDay()]}）` }
 
 /**
- * 總覽 before the first game: the navy board welcomes the team and walks the first steps (a recorder signs in, the
+ * 總覽 before the first game: the navy board welcomes the team and walks the first steps (someone signs in, the
  * roster goes in, the first game is recorded), ticking each off as it is done. Once a game is played the season hero
  * takes its place.
  */
 export function WelcomeBoard({ next }: { next?: Game }) {
   const cloud = useDataStore((s) => s.cloud)
   const rosterCount = useDataStore((s) => s.base.roster.length)
-  const signedIn = !!cloud.user && cloud.isEditor
-  const steps = [
-    { title: '紀錄員登入', text: '在「資料匯入」的登入框選「第一次使用」，輸入 email 和邀請碼、設定密碼。', to: '/import', action: '去登入', done: !cloud.configured || signedIn },
+  const [login, setLogin] = useState(false)
+  const steps: Array<{ title: string; text: string; to?: string; action: string; done: boolean }> = [
+    // (no page to go to: the sign-in box opens right here)
+    { title: '登入', text: '點「登入」→「第一次使用」，輸入 email 和管理者給你的邀請碼、設定密碼。', action: '登入', done: !cloud.configured || !!cloud.user },
     { title: '匯入球員名單', text: '「球員」頁 → 編輯名單 → 匯入 Excel，背號、守位、投打慣用一次帶入。', to: '/players', action: '去匯入', done: rosterCount > 0 },
     { title: '紀錄第一場比賽', text: '「紀錄比賽」逐球輸入，送出就自動算好數據；比賽中這裡和「即時比分」同步更新。', to: '/record', action: '開始紀錄', done: false },
   ]
@@ -54,10 +59,9 @@ export function WelcomeBoard({ next }: { next?: Game }) {
                   <span className={cx('text-[15px] font-bold', s.done ? 'text-ink-2' : 'text-ink')}>{s.title}</span>
                 </div>
                 <p className="mt-2 text-[13px] text-ink-2 leading-relaxed">{s.text}</p>
-                {!s.done && (
-                  <Link to={s.to} className="press group mt-3 inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-accent text-accent-ink text-[13px] font-semibold hover:brightness-105 transition-[filter]">
-                    {s.action}<ArrowRight className="size-3.5 transition-transform duration-[var(--dur-base)] group-hover:translate-x-0.5" />
-                  </Link>
+                {!s.done && (s.to
+                  ? <Link to={s.to} className={STEP_BUTTON}>{s.action}<ArrowRight className={ARROW} /></Link>
+                  : <button type="button" onClick={() => setLogin(true)} className={cx(STEP_BUTTON, 'cursor-pointer')}>{s.action}<ArrowRight className={ARROW} /></button>
                 )}
                 </Reveal>
               </li>
@@ -65,6 +69,7 @@ export function WelcomeBoard({ next }: { next?: Game }) {
           </ol>
         )}
       </div>
+      <AuthDialog open={login} onClose={() => setLogin(false)} title="登入" />
     </section>
   )
 }
