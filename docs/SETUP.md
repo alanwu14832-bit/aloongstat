@@ -84,12 +84,17 @@ Cloudflare 現在建立網站預設是 Workers（以前叫 Pages），兩者都�
    - `VITE_SUPABASE_ANON_KEY`
 2. **Actions** 分頁：如果顯示要啟用 workflows，按啟用
 3. 左側選 **讓資料庫保持清醒** → **Run workflow** 跑一次，綠勾代表設定正確；**每日備份資料** 也可以手動跑一次確認
+4. **讓 GitHub 直接部署到 Cloudflare**（這個網站靠這一步上線，Cloudflare 自己偵測 GitHub 更新的功能在這裡不會觸發）：
+   - Cloudflare 右上頭像 → **My Profile** → **API Tokens** → **Create Token** → 範本 **Edit Cloudflare Workers** → **Use template** → Account Resources 選自己的帳號、Zone Resources 選 **All zones** → **Continue to summary** → **Create Token**，複製權杖（只顯示一次）
+   - Cloudflare 左側 **Workers & Pages**，右邊的 **Account ID** 複製下來
+   - GitHub repo → **Settings** → **Secrets and variables** → **Actions** → **Secrets** 分頁 → **New repository secret**：`CLOUDFLARE_API_TOKEN`（權杖）、`CLOUDFLARE_ACCOUNT_ID`（帳號 ID）
+   - 之後每次「測試通過就自動上線」的最後一步「部署到 Cloudflare」會把網站推上去；網站沒更新時先看這一步有沒有綠勾
 
 這三個自動化：
 
 | 名稱 | 做什麼 |
 |---|---|
-| 測試通過就自動上線 | Claude 把修改推到 `claude/` 開頭的分支 → 跑測試 → 通過就合併進 `main` → Cloudflare 自動更新網站 |
+| 測試通過就自動上線 | Claude 把修改推到 `claude/` 開頭的分支 → 跑測試 → 通過就合併進 `main` → 直接部署到 Cloudflare |
 | 讓資料庫保持清醒 | 每 3 天讀一筆資料，免費資料庫才不會因為休賽季沒人用而暫停 |
 | 每日備份資料 | 每天把所有比賽資料存成 JSON，放在 Actions 的 Artifacts，保留 30 天 |
 

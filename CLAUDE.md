@@ -42,7 +42,9 @@ settings). Setup and operations are in docs/SETUP.md and docs/HANDOVER.md; keep 
 - Team identity (name as written in games, display names, innings, file prefix) lives in `web/src/config/teamDefaults.ts`.
   Tests run as BaFiN with its 7 innings (`test.env` in `web/vite.config.ts`) because the fixtures are BaFiN's games.
 - Ship through a `claude/...` branch: `.github/workflows/auto-deploy.yml` runs tests + build and merges into `main`;
-  Cloudflare deploys `main`. Run `npm test` and `npm run build` in `web/` before pushing.
+  its last step, 部署到 Cloudflare, builds the site with the Supabase variables and runs `npx wrangler deploy` with the
+  `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets (Cloudflare's own Git builds never fired on a push here, so
+  GitHub deploys; without the secrets the step only warns). Run `npm test` and `npm run build` in `web/` before pushing.
 - Database change: add an idempotent `supabase/migrations/<yyyy-mm-dd>_<what>.sql`, apply the same change to
   `schema.sql`, and tell the maintainer to run the migration in Supabase → SQL Editor. The site must keep working before
   it is run (see how `runner` / `errors` / `day_roster` fall back and warn in `web/src/data/supabase.ts`).

@@ -1,7 +1,7 @@
 name: 測試通過就自動上線
 
 # Claude 把修改推到 claude/ 開頭的分支後，先合併最新的 main，再對合併後的版本跑測試與建置，通過才推進 main；
-# Cloudflare 看的是 main，所以合併完網站就會自己更新，不用再開 PR。
+# 合併後最後一步用 Cloudflare 權杖直接部署網站（需要 Secrets：CLOUDFLARE_API_TOKEN、CLOUDFLARE_ACCOUNT_ID），不用再開 PR。
 # 要暫停自動上線：GitHub → Actions → 左邊選這個 workflow → 右上 ⋯ → Disable workflow。
 
 on:
@@ -83,10 +83,10 @@ jobs:
       - name: 上線（推進 main）
         run: |
           git push origin HEAD:main
-          echo "已合併進 main，Cloudflare 會在約兩分鐘後更新網站。" >> "$GITHUB_STEP_SUMMARY"
+          echo "已合併進 main。" >> "$GITHUB_STEP_SUMMARY"
 
       # 網站版本：把這一版另外建置成「只能瀏覽」的副本，放進 site-archive 分支的 v/<編號>/（保留最近 30 版）。
-      # Cloudflare 建置網站時會把它們一起放上去（web/scripts/archive.mjs），網站的「網站版本」頁就能打開以前的版本。
+      # 下一步部署網站時會把它們一起放上去（web/scripts/archive.mjs），網站的「網站版本」頁就能打開以前的版本。
       # 這一步失敗不影響上線。
       - name: 保存這一版（網站版本）
         continue-on-error: true
@@ -118,3 +118,31 @@ jobs:
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m "網站版本：保存 $ID"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" site-archive
           echo "已保存這一版：$ID（下一次網站更新後就能在「網站版本」頁打開）" >> "$GITHUB_STEP_SUMMARY"
+
+      # 部署：用 Cloudflare 權杖把網站直接推上 Cloudflare Workers，不靠 Cloudflare 自己偵測 GitHub 的更新
+      # （這個 repo 的 Cloudflare 從來沒有在推送後自動建置過）。需要 GitHub → Settings → Secrets and variables →
+      # Actions → Secrets：CLOUDFLARE_API_TOKEN（Cloudflare「Edit Cloudflare Workers」範本建的權杖）、CLOUDFLARE_ACCOUNT_ID。
+      # 還沒設定時只提醒、不部署（網站維持原樣）；沒有 Supabase 設定時不部署，免得上線一個讀不到雲端資料的網站。
+      - name: 部署到 Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
+          ARCHIVE_IN_CI: '1'
+          ARCHIVE_TOKEN: ${{ github.token }}
+          ARCHIVE_REPO: ${{ github.repository }}
+        run: |
+          set -e
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::沒有部署到 Cloudflare：GitHub → Settings → Secrets and variables → Actions → Secrets 要有 CLOUDFLARE_API_TOKEN 和 CLOUDFLARE_ACCOUNT_ID"
+            exit 0
+          fi
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::沒有部署：GitHub → Settings → Secrets and variables → Actions 的 Variables（或 Secrets）要有 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY，不然網站讀不到雲端資料"
+            exit 1
+          fi
+          cd web
+          npm run build
+          npx --yes wrangler deploy
+          echo "已部署到 Cloudflare：https://aloongstat.mbaw.workers.dev" >> "$GITHUB_STEP_SUMMARY"
