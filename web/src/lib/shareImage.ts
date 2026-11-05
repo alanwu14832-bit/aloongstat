@@ -4,7 +4,7 @@
  * its context. Colours: the dark scoreboard surface and the team colour lifted for a dark background.
  */
 const W = 1080, H = 1350
-const BG = '#141517', INK = '#f3efe7', MUTED = 'rgba(243,239,231,0.6)', LINE = 'rgba(243,239,231,0.16)'
+const BG = '#011d3b', INK = '#f5f7fb', MUTED = 'rgba(245,247,251,0.6)', LINE = 'rgba(245,247,251,0.16)'
 const SANS = '"PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif'
 const FIG = '"Barlow Semi Condensed", "SF Pro Display", system-ui, sans-serif'
 

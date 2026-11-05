@@ -78,7 +78,7 @@ export function LivePage() {
 }
 
 // the board is always dark: the team colour is lifted toward the board's ink so a navy or a dark amber still glows
-const BOARD_ACCENT = 'color-mix(in srgb, var(--accent) 62%, #f3efe7)'
+const BOARD_ACCENT = 'color-mix(in srgb, var(--accent) 62%, #f5f7fb)'
 const LED_DOTS = 'radial-gradient(rgba(255,255,255,0.055) 0.9px, transparent 1.3px)'
 /** One character per pitch, so a called strike (好) and a whiff (空) differ in words, not only in colour. */
 const PITCH_COLOR: Record<string, string> = { B: BOARD.ball, S: BOARD.strike, CS: BOARD.strike, SS: BOARD.out, F: BOARD.strike, IP: BOARD.ink }

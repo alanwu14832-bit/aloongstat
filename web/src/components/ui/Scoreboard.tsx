@@ -3,8 +3,9 @@ import { cx } from '../../lib/format'
 
 /** Ballpark scoreboard surface: always dark, light figures, whatever the site theme. */
 export const BOARD = {
-  bg: '#141517', ink: '#f3efe7', muted: 'rgba(243,239,231,0.55)', line: 'rgba(243,239,231,0.14)', on: '#f3efe7', off: 'rgba(243,239,231,0.16)',
-  ball: '#4cc47a', strike: '#e5a53a', out: '#e0554a',
+  // the team's navy board (霸龍), white lamps, the logo's gold for strikes
+  bg: '#011d3b', ink: '#f5f7fb', muted: 'rgba(245,247,251,0.6)', line: 'rgba(245,247,251,0.14)', on: '#f5f7fb', off: 'rgba(245,247,251,0.16)',
+  ball: '#4cc47a', strike: '#f4cb21', out: '#e0554a',
 }
 
 /** The classic B / S / O lights: three balls, two strikes, two outs. `order="SBO"` (即時比分) puts strikes first, the CPBL board's order. */

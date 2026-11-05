@@ -115,9 +115,8 @@
     font-family: var(--font-display);
     font-size: 30px;
     line-height: 1.12;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: var(--tracking-display);
-    font-variation-settings: "opsz" 48;
   }
   @media (min-width: 768px) {
     .text-display { font-size: 40px; }
@@ -187,15 +186,6 @@
     outline: none;
   }
 }
-
-/* 宋體 renders light on screens, so the serif mode runs one weight step heavier across the board.
-   Unlayered on purpose: it has to win over Tailwind's utility layer. */
-html[data-font="serif"] body { font-weight: 500; }
-html[data-font="serif"] .font-normal { font-weight: 500; }
-html[data-font="serif"] .font-medium { font-weight: 600; }
-html[data-font="serif"] .font-semibold,
-html[data-font="serif"] h4 { font-weight: 700; }
-html[data-font="serif"] .font-bold { font-weight: 700; }
 
 /* People who turn off transparency get a solid dim instead of a blurred backdrop. */
 @media (prefers-reduced-transparency: reduce) {
