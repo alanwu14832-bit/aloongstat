@@ -16,6 +16,8 @@ import { f2, f3, pct, pct0, shortDate, signedInt } from '../lib/fmt'
 import { TEAM_NAME } from '../data/seed'
 import { useDataStore } from '../store/data'
 import { SeasonHero } from '../components/ui/SeasonHero'
+import { WelcomeBoard } from '../components/ui/WelcomeBoard'
+import { playedGames } from '../data/filters'
 import { GameCard, gameStar } from '../components/ui/GameCard'
 import { teamStories } from '../data/stories'
 import { scheduledGames } from '../data/schedule'
@@ -53,6 +55,7 @@ export function OverviewPage() {
   const filters = useDataStore((st) => st.filters)
   const next = useMemo(() => { const today = new Date().toISOString().slice(0, 10); return scheduledGames(s.dataset.games).find((g) => g.date >= today) }, [s.dataset.games])
   const resetFilters = useDataStore((st) => st.resetFilters)
+  const hasPlayed = useMemo(() => playedGames(s.full).length > 0, [s.full])
   // When the filter narrows to one opponent, name it; otherwise each game names its own opponent.
   const oppLabel = opponentFilter !== 'all' ? opponentFilter : '對手'
 
@@ -76,6 +79,13 @@ export function OverviewPage() {
   }, [summaries, s.fielders])
   const recentGames = useMemo(() => [...summaries].reverse().slice(0, 4), [summaries])
   if (summaries.length === 0) {
+    // no game played at all yet: the welcome board (the filters have nothing to narrow); otherwise the filter hides them
+    if (!hasPlayed) return (
+      <>
+        <PageHeader title="總覽" description={`${TEAM.org}的比賽紀錄、即時比分與球員數據。`} />
+        <WelcomeBoard next={next} />
+      </>
+    )
     return (
       <>
         <PageHeader scoped title="總覽" description={`${TEAM_NAME} 的全時期表現。`} />
