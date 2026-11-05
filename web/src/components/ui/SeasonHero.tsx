@@ -7,7 +7,8 @@ import { RollingNumber } from '../motion/RollingNumber'
 import { Reveal } from '../motion/Reveal'
 import { TeamLogo } from './TeamLogo'
 import { Stitches } from './Scoreboard'
-import { HeroGlow } from './HeroGlow'
+import { SeamMark } from './HeroGlow'
+import { TEAM, teamAsset } from '../../config/team'
 import type { Story } from '../../data/stories'
 import { finishedSummaries, LIVE_TEXT, resultText, teamSummary, type GameSummary, type TeamSummary } from '../../data/stats'
 import { LiveDot } from './ResultBadge'
@@ -52,20 +53,24 @@ export function StoryCard({ s, i, link = true }: { s: Story; i: number; link?: b
       <p className="text-[13px] text-ink-2 leading-snug mt-2">{s.text}</p>
     </>
   )
-  const cls = 'group relative block h-full p-4 md:px-5 md:py-4 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--surface)_72%,transparent)] ring-1 ring-[var(--border)] backdrop-blur-[2px]'
+  const cls = 'group relative block h-full rounded-[var(--radius-sm)] -mx-2 px-2 py-1.5'
   return (
     <Reveal delay={0.06 * i} y={6} className="min-w-0 h-full">
-      {s.player && link ? <Link to={`/players?player=${encodeURIComponent(s.player)}`} className={cx(cls, 'lift')}>{body}</Link> : <div className={cls}>{body}</div>}
+      {s.player && link ? <Link to={`/players?player=${encodeURIComponent(s.player)}`} className={cx(cls, 'transition-colors hover:bg-surface-2')}>{body}</Link> : <div className={cls}>{body}</div>}
     </Reveal>
   )
 }
 
-/** Stories side by side; phones swipe through them (the row bleeds to the card's 20px edge). */
+/** Stories in one row split by hairlines (no box around each); a list on a phone. */
 export function StoryRow({ stories, link = true, className }: { stories: Story[]; link?: boolean; className?: string }) {
   return (
-    <div className={cx('-mx-5 px-5 pb-1 -mb-1 flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0 sm:grid sm:overflow-visible',
+    <div className={cx('grid grid-cols-1 border-t border-border sm:gap-y-3',
       stories.length >= 4 ? 'sm:grid-cols-2 xl:grid-cols-4' : stories.length === 3 ? 'sm:grid-cols-3' : stories.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-1', className)}>
-      {stories.map((s, i) => <div key={s.id} className={cx('snap-start shrink-0 sm:w-auto', stories.length === 1 ? 'w-full' : 'w-[74%]')}><StoryCard s={s} i={i} link={link} /></div>)}
+      {stories.map((s, i) => (
+        <div key={s.id} className="min-w-0 py-3 sm:pt-4 sm:pb-0 border-b border-border last:border-b-0 sm:border-b-0 sm:pr-5 sm:[&:not(:first-child)]:pl-5 sm:[&:not(:first-child)]:border-l">
+          <StoryCard s={s} i={i} link={link} />
+        </div>
+      ))}
     </div>
   )
 }
@@ -81,8 +86,9 @@ export function SeasonHero({ summary, summaries, stories, next, title }: { summa
   // the numbers beside the record count the same games: a game being recorded is in none of them (戰績先不算)
   const done = useMemo(() => (summary.live ? teamSummary(finishedSummaries(summaries)) : summary), [summary, summaries])
   return (
-    <section aria-label="球季概況" className="relative overflow-hidden rounded-[var(--radius)] bg-surface shadow-[var(--shadow-card)]">
-      <HeroGlow />
+    <section aria-label="球季概況" className="brand-board relative overflow-hidden rounded-[var(--radius)]">
+      <SeamMark className="pointer-events-none absolute -right-16 -top-20 w-[340px] md:w-[420px] text-white" style={{ opacity: 0.07 }} />
+      <img src={teamAsset(TEAM.logo)} alt="" aria-hidden className="pointer-events-none select-none absolute -right-6 -bottom-10 w-[220px] md:w-[300px] opacity-[0.10] hidden sm:block" />
       <div className="relative p-5 md:p-7 flex flex-col gap-6">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5">
           <div className="min-w-0">
@@ -94,7 +100,7 @@ export function SeasonHero({ summary, summaries, stories, next, title }: { summa
               {summary.live > 0 && <span className="inline-flex items-center gap-1 text-accent"><LiveDot />{summary.live > 1 ? `${summary.live} 場` : ''}{LIVE_TEXT}，戰績先不算</span>}
             </div>
             <div className="mt-3 flex items-end gap-4 md:gap-6 flex-wrap">
-              <div className="figure font-bold text-ink leading-[0.85] text-[64px] md:text-[88px] tracking-[-0.01em]" aria-label={`戰績 ${summary.w} 勝 ${summary.l} 敗${summary.t ? ` ${summary.t} 和` : ''}`}>
+              <div className="figure font-bold text-accent leading-[0.85] text-[64px] md:text-[88px] tracking-[-0.01em]" aria-label={`戰績 ${summary.w} 勝 ${summary.l} 敗${summary.t ? ` ${summary.t} 和` : ''}`}>
                 <RollingNumber text={record} />
               </div>
               <dl className="flex gap-5 pb-1.5 md:pb-2.5">
@@ -127,8 +133,8 @@ export function SeasonHero({ summary, summaries, stories, next, title }: { summa
         </div>
         {stories.length > 0 && (
           <>
-            <div className="flex items-center gap-3 text-[11px] text-muted"><Stitches width={40} /><span className="tracking-[0.08em]">本季看點</span></div>
-            <StoryRow stories={stories} className="-mt-2" />
+            <div className="flex items-center gap-3 text-[11px] text-muted -mb-3"><span className="text-accent"><Stitches width={40} /></span><span className="tracking-[0.08em]">本季看點</span></div>
+            <StoryRow stories={stories} />
           </>
         )}
       </div>

@@ -83,7 +83,7 @@ export function AppShell({ children, filters }: AppShellProps) {
               </div>
             </div>
           )}
-          <div className="max-w-[var(--content-max)] mx-auto px-4 py-6 md:px-10 md:py-10 print:max-w-none print:p-0"><PageTransition id={pathname}>{children}</PageTransition></div>
+          <div className="max-w-[var(--content-max)] mx-auto px-4 py-5 md:px-10 md:py-8 print:max-w-none print:p-0"><PageTransition id={pathname}>{children}</PageTransition></div>
         </main>
       </div>
     </div>
