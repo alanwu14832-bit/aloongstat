@@ -19,8 +19,9 @@ settings). Setup and operations are in docs/SETUP.md and docs/HANDOVER.md; keep 
   pitching / fielding rows, player pages, scouting only for the team's accounts. Not built yet: today everything is
   public read like the source site.
 - First features planned: login-only stats, per-pitch type + location (+ optional velocity), rule presets per
-  competition (甲組春季聯賽, 爆米花聯盟, 熱身賽), opponent scouting reports. Team colours and logo wait for the team's
-  permission: `web/public/mark.png` and the accent in teamDefaults.ts are neutral placeholders.
+  competition (甲組春季聯賽, 爆米花聯盟, 熱身賽), opponent scouting reports. The team's logo (given by the maintainer
+  2026-11-05) is `web/public/logo.png` (outer background made transparent) and `mark.png` (the mascot's head, for small
+  sizes); colours from it: navy #011d3b (accent, light mode) and gold #f4cb21 (dark mode and scoreboards).
 
 ## Layout
 - `web/` — the site (Vite + React 19 + TypeScript + Tailwind 4 + zustand). `npm ci`, `npm test`, `npm run build` from `web/`.

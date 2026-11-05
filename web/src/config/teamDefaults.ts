@@ -16,7 +16,7 @@ export const TEAM_DEFAULTS = {
   /** VITE_TEAM_MARK: square mark (sidebar, tab icon, home screen): a file in web/public or a full URL. */
   mark: 'mark.png',
   /** VITE_TEAM_LOGO: full logo on the guide page: a file in web/public or a full URL. */
-  logo: 'mark.png',
+  logo: 'logo.png',
   /** VITE_TEAM_INNINGS: regulation innings; ERA and new games default to it. */
   innings: 9,
   /** VITE_TEAM_TIEBREAK: 延長賽突破僵局 — the bases the rule puts runners on from the inning after regulation (WBSC:
@@ -33,11 +33,11 @@ export const TEAM_DEFAULTS = {
   /** VITE_TEAM_ACCENT / _DARK: the team colour used for emphasis (titles' stitching, the team's own bars and buttons),
    *  in light and dark mode. Text drawn on it uses VITE_TEAM_ACCENT_INK / _INK_DARK. The dark-mode pair is also used on
    *  the always-dark scoreboard surfaces. */
-  // (a neutral placeholder until the team's colours are licensed)
-  accent: '#2d2d2d',
-  accentDark: '#c9c9c9',
+  // the logo's navy and gold: navy in light mode, gold on dark surfaces (dark mode and the scoreboards)
+  accent: '#011d3b',
+  accentDark: '#f4cb21',
   accentInk: '#ffffff',
-  accentInkDark: '#141414',
+  accentInkDark: '#011d3b',
   /** 投手休息表 (no VITE_ variable: edit here, per team). MLB Pitch Smart 19–22 歲建議 — a recommendation, not a league
    *  rule, and the site never blocks a pitching change with it. tiers = [most pitches that day, rest days]; past the last
    *  tier rest `over` days (the 2017 MLB/USA Baseball update; the live table leaves out 106–120). dailyMax = most pitches

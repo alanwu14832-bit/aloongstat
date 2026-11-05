@@ -36,7 +36,7 @@ describe('link previews', () => {
   })
   it('falls back to the logo and a small card without og.png', () => {
     const html = socialMeta({ ...live, siteUrl: '' }, '/', { hasOgImage: false })
-    expect(meta(html, 'og:image')).toBe('/mark.png')
+    expect(meta(html, 'og:image')).toBe('/logo.png')
     expect(meta(html, 'twitter:card')).toBe('summary')
     expect(meta(html, 'og:image:width')).toBeUndefined()
   })

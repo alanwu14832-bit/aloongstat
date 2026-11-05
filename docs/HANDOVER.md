@@ -84,7 +84,7 @@ Claude 會在 `supabase/migrations/` 多一個檔案並告訴你。到 Supabase 
 - 比賽影片也一樣：整場影片上傳到 YouTube 設成「不公開」（或放 Google Drive 設「知道連結的使用者：檢視者」），紀錄員在比賽頁「照片與影片」按「＋ 比賽影片」貼上；它存在同一張相簿表（標成「比賽影片」），不用改資料庫，網站也不嵌入播放器，點了在新分頁打開。
 
 ## 連結預覽（LINE、FB 貼網址時出現的圖和介紹）
-- 在 LINE、Facebook、Messenger、Discord 貼本站任何網址，都會出現同一張預覽圖、標題「台壽霸龍 Stats — 臺中台壽霸龍成棒隊數據平台」和一句介紹。預覽圖是 `web/public/og.png`（深色底、隊徽、隊名、網址），現在用的是暫用的灰底 A 隊徽；拿到隊徽授權後，請 Claude「重新產生連結預覽圖」。網站畫面本身沒有任何變化。
+- 在 LINE、Facebook、Messenger、Discord 貼本站任何網址，都會出現同一張預覽圖、標題「台壽霸龍 Stats — 臺中台壽霸龍成棒隊數據平台」和一句介紹。預覽圖是 `web/public/og.png`（深色底、隊徽、隊名、網址），換了隊徽或隊名，請 Claude「重新產生連結預覽圖」。網站畫面本身沒有任何變化。
 - **LINE、FB 會把預覽記住好幾天**：之前貼過的連結不會馬上換新圖。Facebook 可以到「分享偵錯工具」（developers.facebook.com/tools/debug）貼上網址 → 按「再次抓取」；LINE 通常幾天後自己更新。
 - **換了隊徽或隊名**：請 Claude「重新產生連結預覽圖」（它會跑 `tools/og/make-og.mjs`，產生新的 `web/public/og.png` 再上線）。
 - **換了網址或買了網域**：照 [SETUP.md](SETUP.md) 第 3 步設 `VITE_TEAM_SITE_URL`。沒設的話預覽圖用 `web/src/config/teamDefaults.ts` 裡的 `siteUrl`（網站目前的網址）。

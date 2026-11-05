@@ -31,4 +31,4 @@ npm test         # 測試
 npm run build    # 建置
 ```
 
-隊名、局數等設定在 `web/src/config/teamDefaults.ts`；隊徽放 `web/public/mark.png`（正方形，現在是暫用的灰底 A，取得球隊授權後再換）。
+隊名、局數等設定在 `web/src/config/teamDefaults.ts`；隊徽在 `web/public/logo.png`（完整版）與 `web/public/mark.png`（正方形、只有霸龍頭像，給小圖示用）；配色取自隊徽：深藍 #011d3b、金黃 #f4cb21。
