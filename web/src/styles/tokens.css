@@ -1,27 +1,31 @@
-/* NTU BaFiN Stats design tokens.
+/* 臺中台壽霸龍 Stats design tokens (navy and gold from the team's logo; the accent itself comes from teamDefaults.ts).
    Three theme states: bare :root = light; system-dark via media query; explicit data-theme="dark".
    The two dark blocks must stay identical, so choosing 深色 looks the same as a phone set to dark.
    Everything on the site is drawn with these: one background, three surfaces, one border, three inks, one accent. */
 :root {
-  --bg: #f5f5f7;
+  --bg: #f3f5f8;
   --surface: #ffffff;
-  --surface-2: #f2f2f4;
-  --surface-3: #e8e8ed;
-  --border: rgba(0, 0, 0, 0.07);
-  --border-strong: rgba(0, 0, 0, 0.14);
-  --ink: #1d1d1f;
-  --ink-2: #515154;
+  --surface-2: #eef1f5;
+  --surface-3: #e2e7ee;
+  --border: rgba(1, 29, 59, 0.08);
+  --border-strong: rgba(1, 29, 59, 0.16);
+  --ink: #0d1726;
+  --ink-2: #44506a;
   /* ≥ 4.5:1 on the background and the surfaces (WCAG AA for small text) */
-  --muted: #6b6b70;
-  --accent: #c8811a;
-  --accent-ink: #1a1207;
-  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
-  --grid: #ececef;
-  --axis: #d2d2d7;
+  --muted: #5f6b80;
+  --accent: #011d3b;
+  --accent-ink: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  /* the logo's two colours, for the places that always use them (the sidebar, the scoreboard hero) */
+  --brand-navy: #011d3b;
+  --brand-navy-2: #0a2c55;
+  --brand-gold: #f4cb21;
+  --grid: #e6eaf0;
+  --axis: #cbd2dc;
 
   /* series-1 is always our team (the team colour), series-2 the other side or the comparison (neutral grey) */
   --series-1: var(--accent);
-  --series-2: #aeaeb5;
+  --series-2: #a9b2c0;
   --series-3: #1f9484;
   --series-4: #7a5ad4;
   --series-5: #cf4f78;
@@ -64,16 +68,15 @@
   --shadow-modal: 0 32px 80px rgba(20, 24, 40, 0.22), 0 2px 8px rgba(20, 24, 40, 0.08);
   --scrim: rgba(20, 24, 40, 0.30);
 
-  /* Type, three voices: titles in an editorial serif (思源宋體), figures in a condensed athletic face (Barlow, like a
-     scoreboard or a jersey number), reading text in the system face (SF Pro / Inter with 蘋方／思源黑體 for CJK).
-     data-font="serif" on <html> (the 宋 toggle) sets the reading text in the serif too. */
+  /* Type, three voices: titles in a heavy sans (思源黑體 Black/ExtraBold, sporty like the team's lettering), figures in a
+     condensed athletic face (Barlow, like a scoreboard or a jersey number), reading text in the system face (SF Pro /
+     Inter with 蘋方／思源黑體 for CJK). */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
-  --font-serif: "Source Serif 4", "Noto Serif TC", "Songti TC", "PMingLiU", "Noto Serif CJK TC", Georgia, serif;
   --font-figure: "Barlow Semi Condensed", "SF Pro Display", "Inter", var(--font-sans);
-  --font-display: var(--font-serif);
+  --font-display: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", var(--font-sans);
   --font-body: var(--font-sans);
-  --tracking-display: -0.01em;
-  --tracking-heading: 0;
+  --tracking-display: -0.02em;
+  --tracking-heading: -0.01em;
   --font-features: "cv11", "ss01", "calt";
 
   /* Motion: one easing family for the whole site. ease-out for anything entering or responding,
@@ -95,31 +98,26 @@
   color-scheme: light;
 }
 
-:root[data-font="serif"] {
-  --font-body: var(--font-serif);
-  --font-features: "calt", "liga";
-}
-
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #000000;
-    --surface: #1c1c1e;
-    --surface-2: #2c2c2e;
-    --surface-3: #3a3a3c;
-    --border: rgba(255, 255, 255, 0.10);
-    --border-strong: rgba(255, 255, 255, 0.18);
-    --ink: #f5f5f7;
-    --ink-2: #c7c7cc;
-    --muted: #a1a1a6;
-    --accent: #e2a03a;
-    --accent-ink: #1a1207;
+    --bg: #060d18;
+    --surface: #0e1828;
+    --surface-2: #152237;
+    --surface-3: #1f2d45;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --ink: #f2f5fa;
+    --ink-2: #c4ccd8;
+    --muted: #97a2b4;
+    --accent: #f4cb21;
+    --accent-ink: #011d3b;
     --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
-    --grid: #2a2a2d;
-    --axis: #3a3a3f;
+    --grid: #1b273b;
+    --axis: #2c3b54;
     --shadow-card: inset 0 1px 0 0 rgba(255, 255, 255, 0.07), 0 0 0 1px rgba(255, 255, 255, 0.06), 0 10px 30px -12px rgba(0, 0, 0, 0.6);
 
     --series-1: var(--accent);
-    --series-2: #636369;
+    --series-2: #5b6679;
     --series-3: #2f9d8d;
     --series-4: #8f7ce4;
     --series-5: #d86a8e;
@@ -127,7 +125,7 @@
     --series-7: #3f93c4;
     --series-8: #d65c5c;
     --pr-hot: #e8615f;
-    --pr-mid: #5f5f66;
+    --pr-mid: #5b6679;
     --pr-cold: #5d93dc;
 
     --seq-100: color-mix(in srgb, var(--accent) 14%, var(--surface));
@@ -158,24 +156,24 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #000000;
-  --surface: #1c1c1e;
-  --surface-2: #2c2c2e;
-  --surface-3: #3a3a3c;
-  --border: rgba(255, 255, 255, 0.10);
-  --border-strong: rgba(255, 255, 255, 0.18);
-  --ink: #f5f5f7;
-  --ink-2: #c7c7cc;
-  --muted: #a1a1a6;
-  --accent: #e2a03a;
-  --accent-ink: #1a1207;
+  --bg: #060d18;
+  --surface: #0e1828;
+  --surface-2: #152237;
+  --surface-3: #1f2d45;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --ink: #f2f5fa;
+  --ink-2: #c4ccd8;
+  --muted: #97a2b4;
+  --accent: #f4cb21;
+  --accent-ink: #011d3b;
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
-  --grid: #2a2a2d;
-  --axis: #3a3a3f;
+  --grid: #1b273b;
+  --axis: #2c3b54;
   --shadow-card: inset 0 1px 0 0 rgba(255, 255, 255, 0.07), 0 0 0 1px rgba(255, 255, 255, 0.06), 0 10px 30px -12px rgba(0, 0, 0, 0.6);
 
   --series-1: var(--accent);
-  --series-2: #636369;
+  --series-2: #5b6679;
   --series-3: #2f9d8d;
   --series-4: #8f7ce4;
   --series-5: #d86a8e;
@@ -183,7 +181,7 @@
   --series-7: #3f93c4;
   --series-8: #d65c5c;
   --pr-hot: #e8615f;
-  --pr-mid: #5f5f66;
+  --pr-mid: #5b6679;
   --pr-cold: #5d93dc;
 
   --seq-100: color-mix(in srgb, var(--accent) 14%, var(--surface));
@@ -211,3 +209,27 @@
   --scrim: rgba(0, 0, 0, 0.55);
   color-scheme: dark;
 }
+
+/* The brand panel: the sidebar (and the phone menu) on the logo's navy, gold for what is active. It redefines the
+   surface and ink tokens inside it, so every utility in there (text-ink, bg-surface-2, …) draws in navy and white. */
+.brand-panel {
+  --bg: var(--brand-navy);
+  --surface: var(--brand-navy);
+  --surface-2: rgba(255, 255, 255, 0.07);
+  --surface-3: rgba(255, 255, 255, 0.11);
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --ink: #ffffff;
+  --ink-2: rgba(255, 255, 255, 0.78);
+  --muted: rgba(255, 255, 255, 0.56);
+  --accent: var(--brand-gold);
+  --accent-ink: var(--brand-navy);
+  --accent-soft: rgba(244, 203, 33, 0.16);
+  background: linear-gradient(180deg, var(--brand-navy-2) 0%, var(--brand-navy) 38%);
+  color: var(--ink);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand-panel { --brand-navy: #071a33; --brand-navy-2: #0c2546; box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.06); }
+}
+:root[data-theme="dark"] .brand-panel { --brand-navy: #071a33; --brand-navy-2: #0c2546; box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.06); }

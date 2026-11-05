@@ -11,7 +11,7 @@ import { SidebarAccount } from './SidebarAccount'
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery'
 import { cx } from '../../lib/format'
 import { Sheet } from '../ui/Sheet'
-import { FontToggle, ThemeToggle } from './ThemeToggle'
+import { ThemeToggle } from './ThemeToggle'
 
 // the collapse shortcut is Ctrl+B on Windows / Linux and ⌘B on Apple devices (AppShell accepts both)
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent)
@@ -64,9 +64,12 @@ function NavList({ collapsed, reduced }: NavListProps) {
                       {isActive && (
                         <motion.span
                           layoutId="nav-active"
-                          className="absolute inset-0 rounded-[10px] bg-surface-3/80"
+                          className="absolute inset-0 rounded-[10px] bg-surface-3"
                           transition={reduced ? { duration: 0 } : { type: 'spring', visualDuration: 0.25, bounce: 0.05 }}
-                        />
+                        >
+                          {/* the team's gold marks the page you are on */}
+                          <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-accent" />
+                        </motion.span>
                       )}
                       <Icon className="relative size-[18px] shrink-0" strokeWidth={isActive ? 2.1 : 1.8} />
                       <motion.span
@@ -104,8 +107,8 @@ function NavList({ collapsed, reduced }: NavListProps) {
 
 function Brand({ collapsed, reduced }: { collapsed: boolean; reduced: boolean }) {
   return (
-    <div className="flex items-center h-14 pl-[15px] pr-3 mx-3 overflow-hidden whitespace-nowrap">
-      <span className="-ml-1 inline-flex"><TeamLogo size={30} /></span>
+    <div className="flex items-center h-16 pl-[13px] pr-3 mx-3 overflow-hidden whitespace-nowrap">
+      <span className="-ml-1 inline-flex"><TeamLogo size={36} /></span>
       <motion.div
         className="ml-2.5 leading-none min-w-0"
         initial={false}
@@ -113,8 +116,8 @@ function Brand({ collapsed, reduced }: { collapsed: boolean; reduced: boolean })
         transition={reduced ? { duration: 0 } : { duration: 0.16, ease: EASE, delay: collapsed ? 0 : 0.06 }}
         aria-hidden={collapsed}
       >
-        <div className="text-[13.5px] font-semibold text-ink leading-4 tracking-[-0.01em]">{TEAM.org}</div>
-        <div className="text-[11px] text-muted leading-4 mt-px">{TEAM.short}・數據平台</div>
+        <div className="text-[14px] font-bold text-ink leading-4 tracking-[-0.01em] font-display">{TEAM.org}</div>
+        <div className="text-[11px] text-muted leading-4 mt-1 tracking-[0.04em]">{TEAM.short}・數據平台</div>
       </motion.div>
     </div>
   )
@@ -134,7 +137,7 @@ export function Sidebar() {
       initial={false}
       animate={{ width }}
       transition={reduced ? { duration: 0 } : WIDTH_TRANSITION}
-      className="hidden lg:flex print:hidden flex-col sticky top-0 h-screen shrink-0 bg-bg z-40"
+      className="brand-panel hidden lg:flex print:hidden flex-col sticky top-0 h-screen shrink-0 z-40"
       style={{ width }}
     >
       <Brand collapsed={collapsed} reduced={reduced} />
@@ -169,7 +172,7 @@ export function MobileDrawer() {
   const { pathname } = useLocation()
   useEffect(() => { setOpen(false) }, [pathname, setOpen])
   return (
-    <Sheet open={open} onClose={() => setOpen(false)} ariaLabel="主選單" side="left" desktopFrom="never" className="lg:hidden print:hidden">
+    <Sheet open={open} onClose={() => setOpen(false)} ariaLabel="主選單" side="left" desktopFrom="never" className="lg:hidden print:hidden" panelClassName="brand-panel">
       <div className="flex items-center justify-between pr-3">
         <Brand collapsed={false} reduced={reduced} />
         <button type="button" onClick={() => setOpen(false)} aria-label="關閉選單" className="size-9 inline-flex items-center justify-center rounded-full text-ink-2 hover:bg-surface-2 active:bg-surface-3 cursor-pointer">
@@ -182,7 +185,6 @@ export function MobileDrawer() {
       <div className="px-3 pt-3 border-t border-border flex flex-col gap-2">
         <span className="text-[11px] font-medium text-muted">外觀</span>
         <ThemeToggle size="md" />
-        <FontToggle size="md" />
       </div>
       <div className="pb-3"><SidebarAccount collapsed={false} reduced={reduced} /></div>
     </Sheet>
