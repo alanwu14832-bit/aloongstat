@@ -21,7 +21,10 @@ settings). Setup and operations are in docs/SETUP.md and docs/HANDOVER.md; keep 
 - First features planned: login-only stats, per-pitch type + location (+ optional velocity), rule presets per
   competition (甲組春季聯賽, 爆米花聯盟, 熱身賽), opponent scouting reports. The team's logo (given by the maintainer
   2026-11-05) is `web/public/logo.png` (outer background made transparent) and `mark.png` (the mascot's head, for small
-  sizes); colours from it: navy #011d3b (accent, light mode) and gold #f4cb21 (dark mode and scoreboards).
+  sizes); colours from it: navy #011d3b (accent, light mode) and gold #f4cb21 (dark mode and scoreboards). Two more authorized
+  pictures (2026-11-05): `web/public/banner.jpg` (the 使用指南 header) and the square artwork, cut out as
+  `mascot-shadow.png` (mascot + navy long shadow, used by `YellowPanel` in components/ui/BrandArt.tsx). The cracked
+  ground is `cracks.png`, drawn by `tools/brand/cracks.py` and used as a CSS mask (`CrackTexture`).
 
 ## Layout
 - `web/` — the site (Vite + React 19 + TypeScript + Tailwind 4 + zustand). `npm ci`, `npm test`, `npm run build` from `web/`.

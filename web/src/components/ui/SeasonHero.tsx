@@ -7,7 +7,7 @@ import { RollingNumber } from '../motion/RollingNumber'
 import { Reveal } from '../motion/Reveal'
 import { TeamLogo } from './TeamLogo'
 import { Stitches } from './Scoreboard'
-import { SeamMark } from './HeroGlow'
+import { CrackTexture } from './BrandArt'
 import { TEAM, teamAsset } from '../../config/team'
 import type { Story } from '../../data/stories'
 import { finishedSummaries, LIVE_TEXT, resultText, teamSummary, type GameSummary, type TeamSummary } from '../../data/stats'
@@ -87,7 +87,7 @@ export function SeasonHero({ summary, summaries, stories, next, title }: { summa
   const done = useMemo(() => (summary.live ? teamSummary(finishedSummaries(summaries)) : summary), [summary, summaries])
   return (
     <section aria-label="球季概況" className="brand-board relative overflow-hidden rounded-[var(--radius)]">
-      <SeamMark className="pointer-events-none absolute -right-16 -top-20 w-[340px] md:w-[420px] text-white" style={{ opacity: 0.07 }} />
+      <CrackTexture opacity={0.14} fade="top-right" />
       <img src={teamAsset(TEAM.logo)} alt="" aria-hidden className="pointer-events-none select-none absolute -right-6 -bottom-10 w-[220px] md:w-[300px] opacity-[0.10] hidden sm:block" />
       <div className="relative p-5 md:p-7 flex flex-col gap-6">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5">
