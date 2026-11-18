@@ -1,0 +1,1 @@
+import{j as t,B as o,e0 as r}from"./index-DwtLofiJ.js";import{E as i}from"./EmptyState-BsX_8Sie.js";import{C as a}from"./Card-BMuLN_nZ.js";function m(){return t.jsx(a,{children:t.jsx(i,{icon:t.jsx(r,{}),title:"三振出局：找不到這個頁面",description:"網址可能已變更或不存在。回本壘重新站上打擊區。",action:t.jsx(o,{variant:"primary",to:"/",children:"回到總覽"})})})}export{m as NotFoundPage};
