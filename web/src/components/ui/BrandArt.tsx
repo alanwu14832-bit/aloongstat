@@ -43,7 +43,7 @@ export function YellowPanel({ className, mascotClassName }: { className?: string
   return (
     <div aria-hidden className={cx('relative overflow-hidden bg-[#ffe996]', className)}>
       <CrackTexture color="#ffc700" size="900px auto" position="left top" />
-      <img src={teamAsset('mascot-shadow.png')} alt="" className={cx('absolute right-0 bottom-0 h-full max-w-none w-auto select-none', mascotClassName)} />
+      <img src={teamAsset('mascot-shadow.png')} alt="" width={447} height={447} className={cx('absolute right-0 bottom-0 h-full max-w-none w-auto select-none', mascotClassName)} />
     </div>
   )
 }
