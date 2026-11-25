@@ -29,7 +29,7 @@ describe('總覽 before the first game', () => {
   it('games that a filter hides still get the filter message, not the welcome', () => {
     useDataStore.setState({ base: SEED_DATASET, demo: false })
     useDataStore.getState().resetFilters()
-    useDataStore.getState().setFilters({ opponent: '沒有這一隊' })
+    useDataStore.getState().setFilters({ opponent: ['沒有這一隊'] })
     show()
     expect(screen.getByText('目前篩選條件下沒有比賽')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /歡迎來到/ })).toBeNull()
