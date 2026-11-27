@@ -65,7 +65,7 @@ export function MembersTeaser() {
   if (ARCHIVE) return null
   return (
     <section aria-label="登入看完整數據" className="relative overflow-hidden rounded-[var(--radius)] bg-surface shadow-[var(--shadow-card)] p-5 md:p-6 flex flex-col sm:flex-row sm:items-center gap-4">
-      <span className="inline-flex items-center justify-center size-10 rounded-full bg-accent-soft text-accent shrink-0"><Lock className="size-[18px]" /></span>
+      <span className="inline-flex items-center justify-center size-10 rounded-full bg-accent-soft text-accent-text shrink-0"><Lock className="size-[18px]" /></span>
       <div className="min-w-0 flex-1">
         <div className="text-[15px] font-semibold text-ink">球員與紀錄員登入後看完整數據</div>
         <p className="text-[13px] text-ink-2 mt-0.5 leading-relaxed">打擊、投球、守備排行，球員個人頁、走勢圖與落點分佈。帳號由球隊管理者開通。</p>

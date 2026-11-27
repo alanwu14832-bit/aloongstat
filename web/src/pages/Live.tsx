@@ -88,7 +88,7 @@ function IdleBoard({ error, next, last }: { error: string | null; next?: Game; l
       <CrackTexture opacity={0.10} fade="top-right" />
       <Reveal className="relative flex flex-col gap-5 max-w-xl">
         <div className="flex items-center gap-2 text-[12px] text-muted tracking-[0.08em]"><span className="size-2 rounded-full bg-[var(--border-strong)]" />目前沒有進行中的比賽</div>
-        {error && <p className="text-[13px] text-critical">{error}</p>}
+        {error && <p className="text-[13px] text-critical-text">{error}</p>}
         {next ? (
           <div>
             <div className="text-[12px] text-muted">下一場</div>
