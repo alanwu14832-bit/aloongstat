@@ -95,6 +95,8 @@ function IdleBoard({ error, next, last }: { error: string | null; next?: Game; l
             <div className="figure text-[44px] md:text-[60px] font-bold leading-none text-accent mt-1">{dayText(next.date)}{next.time ? <span className="text-ink ml-3">{next.time}</span> : null}</div>
             <div className="mt-2 text-[18px] md:text-[20px] font-bold text-ink">vs {next.opponent}</div>
             <div className="text-[13px] text-ink-2 mt-0.5">{[next.tournament, next.venue].filter(Boolean).join('・')}</div>
+            {/* 2026-11-27: how the last one ended too, like the other two sites' idle card */}
+            {last && <div className="text-[13px] text-ink-2 mt-3">最近一場・{dayText(last.game.date)} vs {last.game.opponent}　<span className="figure font-bold text-ink tnum">{last.runsUs}:{last.runsOpp}</span> {resultText(last.result)}</div>}
           </div>
         ) : last ? (
           <div>
