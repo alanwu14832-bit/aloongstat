@@ -142,6 +142,20 @@ settings). Setup and operations are in docs/SETUP.md and docs/HANDOVER.md; keep 
   Here the top bar keeps its theme icons (no 黑／宋 toggle, so no 「外觀」 menu), `useQualRule` falls back to 'college'
   (`DEFAULT_RULE`; teamDefaults has no qualRule), and 即時比分 keeps its own navy `IdleBoard`, which now also names the last
   result under 下一場.
+- 即時比分改版 A＋D (2026-11-28, the user's pick from a canvas of proposals drawn after MLB Gameday, CPBL's and NPB's live
+  text; all three sites): the board (A: score, bases, S/B/O, line score, 最新, the half card) no longer holds the matchup —
+  it is the 本打席 card under the board (`atBat` in pages/Live.tsx: 打者／投手 with today's lines, every pitch with the count
+  after it and its 球速 from `pitchList`, the runner plays between them, 壘上／下一棒), except in 大螢幕, which keeps the
+  matchup on the board. Under the card one 文字轉播｜Box Score switch at every width; beside it on a wide screen 得分經過
+  (scoring plays, the score after each) and 今日投手 (ours with 局／球數／失分／三振, theirs on the mound). The 文字轉播
+  (`components/ui/Broadcast.tsx`, also the game page's tab): half-inning chips that jump to a half (on /live the rest of
+  regulation dashed: `innings`), 全部／得分／安打 (`FeedItem.hit`), each plate appearance's pitches as chips with the count
+  after each (`code` on the pitch list), 得分 +N / 安打 tags, a finished half's score on its header, and an opened plate
+  appearance draws where the ball went (`components/ui/BattedBall.tsx`, from `ball` = 落點／軌跡／強度; no coordinates, no
+  exit speed). Phones get B's score bar once the board has scrolled away (fixed under the top bar, an IntersectionObserver
+  on the board; a tap goes back to it; the names only from 420 px). `src/test/liveRedesign.test.tsx`.
+  Here the between-games view stays the navy `IdleBoard` and the board's accent mixes toward #f5f7fb, as before;
+  `tools/gamesim/live.mjs` reads the card's rows, opens the Box Score from the switch at 1400 too and checks the pinned bar.
 - 2026-11-25 (players' and recorders' asks): 打擊 page's 擊球強度 is a 強擊率 Hard Hit% bar chart (強 ÷ batted balls with a 強度);
   即時比分 shows 球速 (under each pitch of 本打席, the last one, the pitcher's 最快 today) lit 黃 125–134 / 紅 135+ (`speedTone` in
   data/speeds.ts; theme colours `speedClass` in the 文字轉播 and pitch chips); 修改資料 stays open after 儲存修改 (GameView remounts

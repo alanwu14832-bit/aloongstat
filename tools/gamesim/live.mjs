@@ -104,8 +104,9 @@ const newPitcher = async (name) => {
 const card = () => lv.locator('section', { has: lv.locator('h2, h3', { hasText: /^文字轉播$/ }) }).first()
 const board = () => lv.locator('main').locator('div.\\@container').first()
 async function reload() { await lv.goto(`${URL}/live`, { waitUntil: 'networkidle' }); await lv.waitForTimeout(350) }
-const rowValue = async (label) => (await board().locator('span', { hasText: new RegExp(`^${label}$`) }).first().locator('xpath=following-sibling::span[1]').innerText().catch(() => '')).trim()
-const rowNum = async (label) => (await board().locator('span', { hasText: new RegExp(`^${label}$`) }).first().locator('xpath=following-sibling::span[2]').innerText().catch(() => '')).trim()
+// (2026-11-28: 最新 is on the board, 投手／打者／壘上／下一棒 in the 本打席 card under it — look anywhere on the page)
+const rowValue = async (label) => (await lv.locator('main').locator('span', { hasText: new RegExp(`^${label}$`) }).first().locator('xpath=following-sibling::span[1]').innerText().catch(() => '')).trim()
+const rowNum = async (label) => (await lv.locator('main').locator('span', { hasText: new RegExp(`^${label}$`) }).first().locator('xpath=following-sibling::span[2]').innerText().catch(() => '')).trim()
 const feedText = async () => (await card().innerText().catch(() => '')).replace(/\s+/g, ' ')
 let step = 0
 const shots = []
@@ -212,11 +213,13 @@ async function checkBox(label) {
   if (oppP.length !== 1 || oppP[0][0] !== '對方投手' || oppP[0].at(-1) !== ours) fails.push(`${label} Box Score 對方投手：${JSON.stringify(oppP)}，應為 對方投手 ${ours} 球`)
 }
 await reload()
-// a wide screen: the box under the board, the 文字轉播 beside it, no switch
-if (await lv.getByRole('tablist', { name: '看文字轉播或 Box Score' }).count()) fails.push('1400 寬時不該有「文字轉播｜Box Score」切換')
-if (!(await card().count()) || !(await lv.getByRole('region', { name: '我隊打擊' }).count())) fails.push('1400 寬時 Box Score 和文字轉播應該同時出現')
+// (2026-11-28, redesign A+D: one 文字轉播｜Box Score switch at every width, under the 本打席 card; 得分經過 and 今日投手 beside)
+for (const t of ['本打席', '得分經過', '今日投手']) if (!(await lv.locator('main h2', { hasText: new RegExp(`^${t}$`) }).count())) fails.push(`1400 寬時沒有「${t}」卡片`)
+await lv.screenshot({ path: `${S}/live-feed-1400.png`, fullPage: true })
+await lv.getByRole('tablist', { name: '看文字轉播或 Box Score' }).getByRole('tab', { name: 'Box Score' }).click(); await lv.waitForTimeout(300)
 await checkBox('1400 寬')
 await lv.screenshot({ path: `${S}/live-box-1400.png`, fullPage: true })
+await lv.getByRole('tab', { name: '文字轉播' }).click(); await lv.waitForTimeout(300)
 // (older half-innings start folded: open them all)
 for (let i = 0; i < 30 && (await card().locator('section > button[aria-expanded="false"]').count()); i++) await card().locator('section > button[aria-expanded="false"]').first().click()
 await lv.waitForTimeout(300)
@@ -239,6 +242,15 @@ if (phone.sw > 360) fails.push(`360 寬時頁面可以左右捲動（scrollWidth
 if (phone.heads.length !== 3 || phone.heads.some((r) => r > 360)) fails.push(`360 寬時 R/H/E 不在畫面內：${JSON.stringify(phone.heads)}`)
 if (phone.nameOk.length !== 2 || phone.nameOk.some((x) => !x.ok)) fails.push(`360 寬時隊名被截成一個字：${JSON.stringify(phone.nameOk)}`)
 await lv.screenshot({ path: `${S}/live-360.png`, fullPage: true })
+// B's score bar: scrolled past the board, the score stays on top; a tap goes back up
+await lv.evaluate(() => window.scrollTo(0, 1400)); await lv.waitForTimeout(500)
+const pinned = lv.getByRole('button', { name: /回到計分板$/ })
+if (!(await pinned.count())) fails.push('360 寬往下捲以後沒有置頂比分條')
+else {
+  await lv.screenshot({ path: `${S}/live-360-pinned.png` })
+  await pinned.click(); await lv.waitForTimeout(900)
+  if (await pinned.count()) fails.push('點置頂比分條以後沒有回到計分板')
+}
 // batch 16: the Box Score on a phone — one tap, the same cells, the tables scroll inside the card, the page does not
 await lv.getByRole('tablist', { name: '看文字轉播或 Box Score' }).getByRole('tab', { name: 'Box Score' }).click(); await lv.waitForTimeout(300)
 await checkBox('360 寬')
